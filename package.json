@@ -1,0 +1,26 @@
+{
+  "name": "iq180",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "vite build client",
+    "start": "node server/index.js",
+    "client": "vite build client && vite preview client --host --port 4173 --open",
+    "dev:client": "vite client",
+    "tunnel": "node scripts/tunnel.js",
+    "test": "node --test --test-concurrency=1 \"tests/*.test.js\""
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.131.0",
+    "dotenv": "^18.0.5",
+    "express": "^5.2.1",
+    "socket.io": "^4.8.4"
+  },
+  "devDependencies": {
+    "socket.io-client": "^4.8.4",
+    "vite": "^8.3.2"
+  }
+}
