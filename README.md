@@ -33,8 +33,8 @@ On **laptop A**, set up ngrok once:
 
 1. Sign up at https://dashboard.ngrok.com (free).
 2. Copy your authtoken from *Your Authtoken* and run `ngrok config add-authtoken <token>`.
-3. Under *Domains*, claim your free static domain (e.g. `something-something.ngrok-free.app`).
-4. Put it in `client/src/config.js` → `SERVER_URL = 'https://something-something.ngrok-free.app'`.
+3. Under *Domains*, copy your free static domain (e.g. `something-something.ngrok-free.dev`; free accounts get one auto-assigned name).
+4. Put it in `client/src/config.js` → `SERVER_URL = 'https://something-something.ngrok-free.dev'`.
 5. Optional: set `LAN_FALLBACK_URL` to laptop A's Wi-Fi IP. `npm start` prints it.
 
 Copy the same `client/src/config.js` to laptop B (commit it, or AirDrop the project folder).

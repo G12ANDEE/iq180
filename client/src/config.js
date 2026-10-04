@@ -5,7 +5,7 @@
 // 2. SERVER_URL: the ngrok free static domain that tunnels to the server. It never changes.
 // 3. LAN_FALLBACK_URL: the server laptop's Wi-Fi IP, for when the venue internet is down.
 //    It can go stale if the IP changes; that only matters if the tunnel is also unavailable.
-export const SERVER_URL = 'https://YOUR-STATIC-DOMAIN.ngrok-free.app';
+export const SERVER_URL = 'https://procentralization-bunglingly-phung.ngrok-free.dev';
 export const LAN_FALLBACK_URL = 'http://192.168.1.142:3000';
 
 export const CONNECT_TIMEOUT_MS = 4000;
