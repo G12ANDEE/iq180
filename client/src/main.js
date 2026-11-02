@@ -61,7 +61,7 @@ async function boot() {
     tickClock();
   });
   socket.on('submit_rejected', ({ reason }) => { if (state.screen === 'match') { state.feedback = { text: reason, bad: true }; renderSoft(); } });
-  socket.on('hint', ({ text }) => { if (text) state.hints.push(text); else state.feedback = { text: 'No hints left this round', bad: true }; render(); });
+  socket.on('hint', ({ text, source }) => { if (text) state.hints.push({ text, ai: source === 'ai' }); else state.feedback = { text: 'No hints left this round', bad: true }; render(); });
   socket.on('match_end', (e) => { state.end = e; state.screen = 'end'; render(); });
   socket.on('iq_report', (r) => { if (r.matchNo === state.end?.matchNo) { state.iq = r; render(); } });
   socket.on('rematch_status', ({ votes }) => { state.votes = votes; render(); });
@@ -244,7 +244,7 @@ function viewMatch() {
       <button class="primary grow" data-act="submit" ${state.tokens.length ? '' : 'disabled'}>Submit answer</button>
     </div>
     <div class="feedback ${state.feedback?.bad ? 'bad' : ''}">${esc(state.feedback?.text ?? '')}</div>
-    ${state.hints.length ? `<ul class="hints">${state.hints.map((h) => `<li>${esc(h)}</li>`).join('')}</ul>` : ''}`;
+    ${state.hints.length ? `<ul class="hints">${state.hints.map((h) => `<li${h.ai ? ' class="ai"' : ''}>${esc(h.text)}</li>`).join('')}</ul>` : ''}`;
 }
 
 function viewEnd() {

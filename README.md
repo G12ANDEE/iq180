@@ -90,7 +90,7 @@ npm run client                  # builds, serves the client and opens the browse
 | # | Feature | AI |
 |---|---|---|
 | 1 | **Match IQ roast**: after each match, an LLM (gpt-oss-120b via Groq) estimates a tongue-in-cheek IQ and writes a one-line roast for each player from their attempts, wrong answers, hints used and solve time | ✓ |
-| 2 | **Solver hints**: an exhaustive expression solver finds real solutions and reveals one sub-step per hint (2 per match, private to that player) | ✓ |
+| 2 | **AI coach hints**: an exhaustive solver picks a real sub-step of a real solution, and the LLM rewrites it as a coach-style nudge. The rewrite is accepted only if it keeps the solver's exact expression and doesn't leak the full answer; otherwise the plain solver hint is shown (2 per match, private to that player) | ✓ |
 | 3 | Live expression preview: shows the current value, and the missing-digit warning, as you build | |
 | 4 | Keyboard play: digits, `+ - * / ( )`, Backspace to undo, Esc to clear, Enter to submit | |
 | 5 | Waiting queue for 3+ clients with automatic seat promotion | |
@@ -98,8 +98,8 @@ npm run client                  # builds, serves the client and opens the browse
 ## Layout
 
 ```
-shared/   fraction.js (exact math) · expr.js (parser + judge) · solver.js (all solutions, hints)
-server/   index.js (Express + socket.io) · game.js (match state machine) · generator.js · iq.js · admin/
+shared/   fraction.js (exact math) · expr.js (parser + judge) · solver.js (all solutions, hint steps)
+server/   index.js (Express + socket.io) · game.js (match state machine) · generator.js · llm.js (OpenAI-compatible client) · iq.js · hint.js · admin/
 client/   index.html · src/{main.js, net.js, config.js, style.css}
 scripts/  tunnel.js (starts ngrok on SERVER_URL)
 tests/    expr, solver/generator, game flow over real sockets

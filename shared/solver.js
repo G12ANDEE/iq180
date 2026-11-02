@@ -81,7 +81,8 @@ export function treeToTokens(t) {
 const leafCount = (t) => (t.slot !== undefined ? 1 : leafCount(t.l) + leafCount(t.r));
 
 // Progressive hints: smallest sub-step first, then a bigger chunk, never the full answer.
-export function hintsFor(tree) {
+// Each step keeps the raw facts (expr/value/op) so an LLM can rephrase it and we can verify the rephrase.
+export function hintSteps(tree) {
   const inner = [];
   (function walk(t, isRoot) {
     if (t.slot !== undefined) return;
@@ -89,15 +90,14 @@ export function hintsFor(tree) {
     walk(t.l, false); walk(t.r, false);
   })(tree, true);
   inner.sort((a, b) => leafCount(a) - leafCount(b));
-  const hints = [];
-  if (inner.length) {
-    const first = inner[0];
-    hints.push(`Try making ${first.v} with ${treeToString(first)}`);
-    const big = inner[inner.length - 1];
-    if (big !== first) hints.push(`Build ${treeToString(big)} = ${big.v}, then finish with one more step`);
-    else hints.push(`The last step uses "${tree.op}"`);
-  } else {
-    hints.push(`The last step uses "${tree.op}"`);
-  }
-  return hints;
+  const lastOp = { text: `The last step uses "${tree.op}"`, op: tree.op };
+  if (!inner.length) return [lastOp];
+  const first = inner[0];
+  const steps = [{ text: `Try making ${first.v} with ${treeToString(first)}`, expr: treeToString(first), value: String(first.v) }];
+  const big = inner[inner.length - 1];
+  if (big !== first) steps.push({ text: `Build ${treeToString(big)} = ${big.v}, then finish with one more step`, expr: treeToString(big), value: String(big.v) });
+  else steps.push(lastOp);
+  return steps;
 }
+
+export const hintsFor = (tree) => hintSteps(tree).map((s) => s.text);

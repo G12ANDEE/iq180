@@ -1,10 +1,7 @@
 // AI feature: a tongue-in-cheek "IQ" for each player, written by an LLM from their match stats.
-// Talks to any OpenAI-compatible chat API (Groq by default, or Ollama/OpenRouter via env vars).
 // Falls back to a local formula when there is no API key, the call fails, or it takes too long.
-import { LLM_BASE_URL, LLM_API_KEY, LLM_MODEL, IQ_TIMEOUT_MS } from './config.js';
-
-// Hosted APIs need a key; a custom endpoint (e.g. local Ollama) may not.
-const enabled = Boolean(LLM_API_KEY) || !LLM_BASE_URL.includes('api.groq.com');
+import { IQ_TIMEOUT_MS } from './config.js';
+import { llmEnabled, chatJSON } from './llm.js';
 
 const SYSTEM = `You are the sarcastic-but-kind announcer of IQ180, a party math game where players race to
 reach a target number using five digits with + - x / and parentheses within 60 seconds.
@@ -16,7 +13,7 @@ Reply with JSON only, exactly this shape, one entry per player, names copied exa
 
 // stats: [{ name, won, timedOut, attempts, wrongAttempts, hintsUsed, secondsToSolve|null, target, digits }]
 export async function iqReport(stats) {
-  if (enabled) {
+  if (llmEnabled) {
     try {
       const reports = await askLLM(stats);
       if (reports) return { source: 'ai', reports };
@@ -28,28 +25,8 @@ export async function iqReport(stats) {
 }
 
 async function askLLM(stats) {
-  const res = await fetch(`${LLM_BASE_URL}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(LLM_API_KEY && { Authorization: `Bearer ${LLM_API_KEY}` }),
-    },
-    signal: AbortSignal.timeout(IQ_TIMEOUT_MS),
-    body: JSON.stringify({
-      model: LLM_MODEL,
-      temperature: 0.9,
-      max_tokens: 1500, // headroom: gpt-oss reasons before answering
-      response_format: { type: 'json_object' },
-      messages: [
-        { role: 'system', content: SYSTEM },
-        { role: 'user', content: `Match stats:\n${JSON.stringify(stats, null, 2)}` },
-      ],
-    }),
-  });
-  if (!res.ok) throw new Error(`HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`);
-  const text = (await res.json())?.choices?.[0]?.message?.content;
-  if (!text) return null;
-  const players = JSON.parse(text)?.players;
+  const reply = await chatJSON({ system: SYSTEM, user: `Match stats:\n${JSON.stringify(stats, null, 2)}`, timeoutMs: IQ_TIMEOUT_MS });
+  const players = reply?.players;
   if (!Array.isArray(players)) return null;
   // Re-key by the names we sent so a model typo can't drop or swap a player.
   return stats.map((s, i) => {

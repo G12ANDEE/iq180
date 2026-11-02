@@ -1,4 +1,4 @@
-import { solveAll, treeToString, treeToTokens, hintsFor } from '../shared/solver.js';
+import { solveAll, treeToString, treeToTokens } from '../shared/solver.js';
 import { TARGET_MIN, TARGET_MAX } from './config.js';
 
 const randDigit = () => Math.floor(Math.random() * 10);
@@ -26,4 +26,3 @@ export function generatePuzzle() {
   throw new Error('Could not generate a solvable puzzle');
 }
 
-export { hintsFor };

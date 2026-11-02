@@ -17,3 +17,13 @@ test('100 generated puzzles are solvable and every key solution verifies with th
     assert.ok(hints.length >= 1 && hints.length <= 2);
   }
 });
+
+test('AI hint guard keeps the solver fact and blocks full-answer leaks', async () => {
+  const { isSafeHint } = await import('../server/hint.js');
+  const step = { expr: '3 x 7', value: '21' };
+  assert.ok(isSafeHint('Nice start! Try 3 × 7 = 21 and see where that takes you.', step, '3 x 7 + 2'));
+  assert.ok(!isSafeHint('Try 3 + 7 = 10 first.', step, '3 x 7 + 2'), 'changed math is rejected');
+  assert.ok(!isSafeHint('Just do 3 x 7 = 21, then 3 x 7 + 2.', step, '3 x 7 + 2'), 'full answer is rejected');
+  assert.ok(isSafeHint('Save the "-" for your very last move.', { op: '-' }, '9 x 2 - 1'));
+  assert.ok(!isSafeHint('', step, '3 x 7 + 2'));
+});
