@@ -5,11 +5,12 @@ const randDigit = () => Math.floor(Math.random() * 10);
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 
 // Deal five random digits and a target that is provably reachable using all five of them.
-export function generatePuzzle() {
+// An optional {targetMin, targetMax} narrows the target range for difficulty modes.
+export function generatePuzzle({ targetMin = TARGET_MIN, targetMax = TARGET_MAX } = {}) {
   for (let attempt = 0; attempt < 200; attempt++) {
     const digits = Array.from({ length: 5 }, randDigit);
     const solutions = solveAll(digits);
-    const targets = [...solutions.keys()].filter((n) => n >= TARGET_MIN && n <= TARGET_MAX);
+    const targets = [...solutions.keys()].filter((n) => n >= targetMin && n <= targetMax);
     if (targets.length === 0) continue;
     const target = pick(targets);
     const trees = solutions.get(target);

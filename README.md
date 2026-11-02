@@ -91,16 +91,23 @@ npm run client                  # builds, serves the client and opens the browse
 |---|---|---|
 | 1 | **Match IQ roast**: after each match, Claude estimates a tongue-in-cheek IQ and writes a one-line roast for each player from their attempts, wrong answers, hints used and solve time | ✓ |
 | 2 | **Solver hints**: an exhaustive expression solver finds real solutions and reveals one sub-step per hint (2 per match, private to that player) | ✓ |
-| 3 | Live expression preview: shows the current value, and the missing-digit warning, as you build | |
-| 4 | Keyboard play: digits, `+ - * / ( )`, Backspace to undo, Esc to clear, Enter to submit | |
-| 5 | Waiting queue for 3+ clients with automatic seat promotion | |
+| 3 | **AI opponent (bot)**: fills an empty seat and races you, driven by a free LLM (any OpenAI-compatible endpoint; Groq by default), with easy/medium/hard difficulty | ✓ |
+| 4 | Live expression preview: shows the current value, and the missing-digit warning, as you build | |
+| 5 | Keyboard play: digits, `+ - * / ( )`, Backspace to undo, Esc to clear, Enter to submit | |
+| 6 | Waiting queue for 3+ clients with automatic seat promotion | |
+| 7 | **Difficulty modes** (separate mode): Easy / Normal / Hard change the target range and the countdown length; picked in the lobby and shown on `/admin` | |
+| 8 | **Win-streak bonus** (separate mode): consecutive wins are worth escalating points (1, 2, 3…) instead of a flat point | |
+| 9 | **All-time leaderboard**: wins and best streak per nickname, persisted to disk, shown in the lobby and on `/admin` | |
+| 10 | **Match history**: the last several rounds (digits, target, winner, solution) in the lobby and on `/admin` | |
+| 11 | **Sound effects**: synthesised with the Web Audio API (tile taps, submit, win/lose, final-seconds tick), with a mute toggle | |
+| 12 | **Theme switcher**: Cobalt / Neon / Sunset palettes, remembered across visits | |
 
 ## Layout
 
 ```
 shared/   fraction.js (exact math) · expr.js (parser + judge) · solver.js (all solutions, hints)
-server/   index.js (Express + socket.io) · game.js (match state machine) · generator.js · iq.js · admin/
-client/   index.html · src/{main.js, net.js, config.js, style.css}
+server/   index.js (Express + socket.io) · game.js (match state machine) · generator.js · iq.js · bot.js · leaderboard.js · admin/
+client/   index.html · src/{main.js, net.js, config.js, style.css, sound.js}
 scripts/  tunnel.js (starts ngrok on SERVER_URL)
 tests/    expr, solver/generator, game flow over real sockets
 ```

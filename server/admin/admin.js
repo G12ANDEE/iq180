@@ -18,6 +18,21 @@ function render() {
   $('clients').innerHTML = state.players.map((p) =>
     `<tr><td>${esc(p.nickname ?? '(no nickname yet)')}</td><td>${p.score}</td><td>${statusText[p.status]}</td></tr>`).join('')
     || '<tr><td colspan="3">No clients connected</td></tr>';
+
+  if (state.mode) {
+    const d = (state.mode.difficulties ?? []).find((x) => x.key === state.mode.difficulty);
+    $('mode').textContent = `Mode: difficulty ${d?.label ?? state.mode.difficulty} (${d?.seconds ?? '?'}s) · win-streak bonus ${state.mode.streakMode ? 'ON' : 'off'}`;
+  }
+
+  $('leaderboard').innerHTML = (state.leaderboard ?? []).map((r, i) =>
+    `<tr><td>${i + 1}</td><td>${esc(r.name)}</td><td>${r.wins}</td><td>${r.bestStreak}</td></tr>`).join('')
+    || '<tr><td colspan="4">No wins recorded yet</td></tr>';
+
+  $('history').innerHTML = (state.history ?? []).map((h) =>
+    `<li><span>${h.digits.join(' ')} → <strong>${h.target}</strong> <em>(${esc(h.difficulty)})</em></span>
+       <span>${h.timedOut ? 'no winner' : `${esc(h.winner)}: ${esc(h.winningExpression)}`}</span></li>`).join('')
+    || '<li>No matches played yet</li>';
+
   const m = state.match;
   if (!m) { $('match').textContent = 'No match yet. It starts when two players have joined.'; return; }
   let meta = `Match #${state.matchNo} · ${phaseText[state.phase]}`;

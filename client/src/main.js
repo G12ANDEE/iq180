@@ -3,9 +3,24 @@
 import './style.css';
 import { connectToServer } from './net.js';
 import { evaluate, checkTokens } from '../../shared/expr.js';
+import { sfx, isMuted, setMuted } from './sound.js';
 
 const app = document.getElementById('app');
 const OPS = [['+', '+'], ['-', '−'], ['x', '×'], ['/', '÷']];
+
+// Theme switcher: one of a few palettes, remembered across visits. Applied as data-theme on <html>.
+const THEMES = ['cobalt', 'neon', 'sunset'];
+const THEME_LABEL = { cobalt: '🔵 Cobalt', neon: '🟣 Neon', sunset: '🌅 Sunset' };
+function applyTheme(name) {
+  const t = THEMES.includes(name) ? name : 'cobalt';
+  document.documentElement.dataset.theme = t;
+  localStorage.setItem('iq180:theme', t);
+  state.theme = t;
+}
+function cycleTheme() {
+  applyTheme(THEMES[(THEMES.indexOf(state.theme) + 1) % THEMES.length]);
+  render();
+}
 
 const state = {
   screen: 'connecting', // connecting | nickname | lobby | ready | match | end
@@ -22,6 +37,10 @@ const state = {
   iq: null,
   votes: [],
   banner: null,
+  // Extra features
+  leaderboard: [], history: [], mode: null,
+  theme: localStorage.getItem('iq180:theme') ?? 'cobalt',
+  muted: isMuted(),
 };
 
 let socket;
@@ -34,6 +53,7 @@ const serverNow = () => Date.now() + (state.match?.offset ?? 0);
 // ---------- connection & server events ----------
 
 async function boot() {
+  applyTheme(state.theme);
   render();
   const conn = await connectToServer((url) => { state.server = url; render(); });
   socket = conn.socket;
@@ -41,7 +61,8 @@ async function boot() {
   state.screen = 'nickname';
   render();
 
-  socket.on('players_update', (p) => { Object.assign(state, { players: p.players, queue: p.queue, online: p.online }); if (['lobby', 'match', 'end', 'ready'].includes(state.screen)) renderSoft(); });
+  socket.on('players_update', (p) => { Object.assign(state, { players: p.players, queue: p.queue, online: p.online, mode: p.mode ?? state.mode }); if (['lobby', 'match', 'end', 'ready'].includes(state.screen)) renderSoft(); });
+  socket.on('extras', (e) => { Object.assign(state, { leaderboard: e.leaderboard ?? [], history: e.history ?? [], mode: e.mode ?? state.mode }); if (['lobby', 'end'].includes(state.screen)) renderSoft(); });
   socket.on('join_error', ({ reason }) => { state.joinError = reason; render(); });
   socket.on('welcome', (p) => {
     state.me = { id: p.id, nickname: p.nickname };
@@ -56,13 +77,15 @@ async function boot() {
   });
   socket.on('match_start', (m) => {
     state.match = { ...m, offset: m.serverNow - Date.now() };
+    if (m.mode) state.mode = m.mode;
     Object.assign(state, { screen: 'match', tokens: [], hints: [], feedback: null, end: null, iq: null, votes: [] });
+    sfx.go();
     render();
     tickClock();
   });
   socket.on('submit_rejected', ({ reason }) => { if (state.screen === 'match') { state.feedback = { text: reason, bad: true }; renderSoft(); } });
-  socket.on('hint', ({ text }) => { if (text) state.hints.push(text); else state.feedback = { text: 'No hints left this round', bad: true }; render(); });
-  socket.on('match_end', (e) => { state.end = e; state.screen = 'end'; render(); });
+  socket.on('hint', ({ text }) => { if (text) { state.hints.push(text); sfx.hint(); } else state.feedback = { text: 'No hints left this round', bad: true }; render(); });
+  socket.on('match_end', (e) => { state.end = e; state.screen = 'end'; (e.result === 'win' ? sfx.win : sfx.lose)(); render(); });
   socket.on('iq_report', (r) => { if (r.matchNo === state.end?.matchNo) { state.iq = r; render(); } });
   socket.on('rematch_status', ({ votes }) => { state.votes = votes; render(); });
   socket.on('match_aborted', ({ reason }) => { flash(`${reason}. Back to the lobby.`); state.screen = 'lobby'; state.match = null; render(); });
@@ -92,6 +115,7 @@ function push(tok) {
   state.tokens.push(tok);
   state.pushedAt = Date.now();
   state.feedback = null;
+  (tok.t === 'digit' ? sfx.tap : sfx.op)();
   renderSoft();
 }
 function pressDigitKey(d) {
@@ -104,6 +128,7 @@ function clearExpr() { state.tokens = []; state.feedback = null; renderSoft(); }
 function submit() {
   if (!state.tokens.length) return;
   socket.emit('submit', { tokens: state.tokens });
+  sfx.submit();
   state.feedback = { text: 'Checking…', bad: false };
   renderSoft();
 }
@@ -137,6 +162,7 @@ function tickClock() {
         const s = Math.ceil(ms / 1000);
         el.textContent = `00:${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
         el.classList.toggle('low', s <= 10);
+        if (s > 0 && s <= 5 && s !== tickClock.last) { tickClock.last = s; sfx.tick(); }
       }
     } else clearInterval(clockTimer);
   };
@@ -150,6 +176,10 @@ const topbar = () => `
   <header class="topbar">
     <h1 class="brand">IQ180</h1>
     ${state.me ? `<div class="me">Playing as <strong>${esc(state.me.nickname)}</strong> · score <strong>${myScore()}</strong></div>` : ''}
+    <div class="toggles">
+      <button class="chipbtn" data-act="theme" title="Change theme">${THEME_LABEL[state.theme]}</button>
+      <button class="chipbtn" data-act="mute" title="Toggle sound" aria-pressed="${state.muted}">${state.muted ? '🔇 Muted' : '🔊 Sound'}</button>
+    </div>
   </header>`;
 
 const myScore = () => state.players.find((p) => p.id === state.me?.id)?.score ?? 0;
@@ -182,16 +212,61 @@ function rosterHtml() {
   return `<ul class="roster"><h2>${state.online} connected to the server</h2>${rows}</ul>`;
 }
 
+// Difficulty + streak-bonus picker. Only a seated player can change the mode; others see it read-only.
+function modePanelHtml(editable) {
+  const m = state.mode;
+  if (!m) return '';
+  const diffs = (m.difficulties ?? []).map((d) =>
+    `<button class="pickbtn ${m.difficulty === d.key ? 'on' : ''}" data-act="setdiff" data-diff="${d.key}" ${editable ? '' : 'disabled'}>${esc(d.label)} <small>${d.seconds}s</small></button>`).join('');
+  return `<div class="mode-panel">
+    <div class="mode-row"><span class="mode-label">Difficulty</span><div class="picker">${diffs}</div></div>
+    <div class="mode-row"><span class="mode-label">Win-streak bonus</span>
+      <button class="pickbtn ${m.streakMode ? 'on' : ''}" data-act="togglestreak" ${editable ? '' : 'disabled'}>${m.streakMode ? 'On · consecutive wins score more' : 'Off · flat 1 point per win'}</button>
+    </div>
+  </div>`;
+}
+
+function leaderboardHtml() {
+  if (!state.leaderboard?.length) return '';
+  const rows = state.leaderboard.map((r, i) =>
+    `<li><span class="rank">${i + 1}</span><span class="who ${r.name === state.me?.nickname ? 'you' : ''}">${esc(r.name)}</span><span class="w">${r.wins} win${r.wins === 1 ? '' : 's'}${r.bestStreak > 1 ? ` · 🔥${r.bestStreak}` : ''}</span></li>`).join('');
+  return `<section class="board"><h2>🏆 All-time leaderboard</h2><ol class="lb">${rows}</ol></section>`;
+}
+
+function historyHtml() {
+  if (!state.history?.length) return '';
+  const rows = state.history.map((h) =>
+    `<li><span class="hd">${h.digits.join(' ')} → <strong>${h.target}</strong></span>
+       <span class="hr">${h.timedOut ? 'no winner' : `${esc(h.winner)}: ${esc(h.winningExpression)}`}</span></li>`).join('');
+  return `<section class="board"><h2>🕑 Recent matches</h2><ul class="hist">${rows}</ul></section>`;
+}
+
 function viewLobby() {
   const me = state.players.find((p) => p.id === state.me?.id);
   const named = state.players.filter((p) => p.nickname).length;
+  const opp = state.players.find((p) => p.id !== state.me?.id && (p.status === 'ready' || p.status === 'playing'));
   let line = 'Waiting for an opponent to join…';
   if (me?.status === 'waiting') line = `A match is in progress. You're number ${state.queue.indexOf(state.me.nickname) + 1} in the queue.`;
   else if (named >= 2 && me?.status === 'ready') line = 'Opponent found. Starting soon…';
+  const bot = me?.status === 'ready' && !opp
+    ? `<div class="bot-panel">
+        <p>No human around? Race an AI opponent (powered by a free LLM):</p>
+        <div class="bot-btns">
+          <button class="ghost" data-act="addbot" data-diff="easy">AI · Easy</button>
+          <button class="ghost" data-act="addbot" data-diff="medium">AI · Medium</button>
+          <button class="primary" data-act="addbot" data-diff="hard">AI · Hard</button>
+        </div>
+      </div>`
+    : '';
+  const seated = me?.status === 'ready';
   return `${topbar()}
     <h2 class="welcome">Welcome, ${esc(state.me.nickname)}.</h2>
     <p class="status-line">${line}</p>
-    ${rosterHtml()}`;
+    ${bot}
+    ${modePanelHtml(seated)}
+    ${rosterHtml()}
+    ${leaderboardHtml()}
+    ${historyHtml()}`;
 }
 
 function opponent() {
@@ -260,10 +335,14 @@ function viewEnd() {
     : `<p class="iq-note" style="margin-top:0">Measuring brains…</p>`;
   const iVoted = state.votes.includes(state.me.nickname);
   const others = state.votes.filter((n) => n !== state.me.nickname);
+  const streakLine = win && e.streakMode && e.streak > 1
+    ? `<p class="streak-badge">🔥 ${e.streak} win streak — worth ${e.pointsAwarded} points!</p>` : '';
+  const seated = state.players.find((p) => p.id === state.me?.id)?.status === 'ready';
   return `${topbar()}
     <section class="verdict ${win ? 'win' : 'lost'}">
       <div class="word">${win ? 'Win' : 'Lost'}</div>
       <p>${detail}</p>
+      ${streakLine}
       <p>One key solution: <strong>${esc(e.keySolution)} = ${e.target}</strong></p>
     </section>
     <div class="final-scores">${e.scores.map((s) => `<div><span class="score">${s.score}</span>${esc(s.nickname)}</div>`).join('')}</div>
@@ -271,7 +350,10 @@ function viewEnd() {
     <div class="center">
       <button class="primary" data-act="rematch" ${iVoted ? 'disabled' : ''}>${iVoted ? 'Waiting for opponent…' : 'Rematch'}</button>
       <div class="votes">${others.length ? `${esc(others.join(', '))} wants a rematch.` : ''}</div>
-    </div>`;
+    </div>
+    ${seated ? `<p class="mode-hint">Mode for the rematch:</p>${modePanelHtml(true)}` : ''}
+    ${leaderboardHtml()}
+    ${historyHtml()}`;
 }
 
 const views = { connecting: viewConnecting, nickname: viewNickname, lobby: viewLobby, ready: viewReady, match: viewMatch, end: viewEnd };
@@ -310,6 +392,11 @@ app.addEventListener('click', (ev) => {
   else if (act === 'submit') submit();
   else if (act === 'hint') socket.emit('hint');
   else if (act === 'rematch') socket.emit('rematch');
+  else if (act === 'addbot') socket.emit('add_bot', { difficulty: b.dataset.diff });
+  else if (act === 'mute') { setMuted(!state.muted); state.muted = !state.muted; if (!state.muted) sfx.tap(); render(); }
+  else if (act === 'theme') cycleTheme();
+  else if (act === 'setdiff') socket.emit('set_mode', { difficulty: b.dataset.diff });
+  else if (act === 'togglestreak') socket.emit('set_mode', { streakMode: !state.mode?.streakMode });
 });
 
 document.addEventListener('keydown', (ev) => {

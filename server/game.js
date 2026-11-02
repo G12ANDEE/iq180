@@ -3,9 +3,12 @@
 import { judge, tokensToString } from '../shared/expr.js';
 import { generatePuzzle, hintsFor } from './generator.js';
 import { iqReport } from './iq.js';
-import { MATCH_MS, GET_READY_MS, MAX_HINTS } from './config.js';
+import { Bot } from './bot.js';
+import { Leaderboard } from './leaderboard.js';
+import { GET_READY_MS, MAX_HINTS, DIFFICULTIES, DEFAULT_DIFFICULTY } from './config.js';
 
 const SEATS = 2;
+const HISTORY_MAX = 8;
 
 export class Game {
   constructor(io, { onChange = () => {} } = {}) {
@@ -25,6 +28,60 @@ export class Game {
     this.stats = new Map();   // socketId -> { attempts, wrongAttempts, hintsUsed, hintTree, solvedAt }
     this.timer = null;
     this.readyTimer = null;
+    this.bot = null;          // the single AI opponent, if one has been added
+    // Extra features: selectable match mode, win streaks, recent history and an all-time board.
+    this.difficulty = DEFAULT_DIFFICULTY;
+    this.streakMode = false;
+    this.matchMs = DIFFICULTIES[DEFAULT_DIFFICULTY].ms;
+    this.streaks = new Map();           // socketId -> current consecutive wins
+    this.history = [];                  // recent finished matches, newest first
+    this.leaderboard = new Leaderboard();
+  }
+
+  // ---------- match mode (difficulty + streak bonus) ----------
+
+  // A seated player picks the mode from the lobby; it applies to the next match.
+  setMode(socket, { difficulty, streakMode } = {}) {
+    if (!this.seats.includes(socket.id)) return;
+    if (this.phase === 'playing' || this.phase === 'ready') return;
+    if (difficulty && DIFFICULTIES[difficulty]) this.difficulty = difficulty;
+    if (typeof streakMode === 'boolean') this.streakMode = streakMode;
+    this.broadcastPlayers();
+  }
+
+  mode() {
+    return { difficulty: this.difficulty, streakMode: this.streakMode, difficulties: this.difficultyList() };
+  }
+
+  difficultyList() {
+    return Object.entries(DIFFICULTIES).map(([key, d]) => ({ key, label: d.label, seconds: Math.round(d.ms / 1000) }));
+  }
+
+  // ---------- AI opponent ----------
+
+  addBot(difficulty) {
+    if (this.bot || this.phase !== 'lobby' || this.seats.length >= SEATS) return;
+    const bot = new Bot(this, difficulty);
+    this.bot = bot;
+    this.clients.set(bot.id, { id: bot.id, nickname: this.uniqueName(bot.nickname), score: 0, socket: bot.socket, isBot: true });
+    this.seats.push(bot.id);
+    this.broadcastPlayers();
+    this.maybeStart();
+  }
+
+  removeBot() {
+    if (!this.bot) return;
+    const id = this.bot.id;
+    this.bot.cancel();
+    const wasSeated = this.seats.includes(id);
+    this.clients.delete(id);
+    this.seats = this.seats.filter((x) => x !== id);
+    this.queue = this.queue.filter((x) => x !== id);
+    this.bot = null;
+    if (wasSeated && this.phase !== 'lobby') this.abortMatch('The AI opponent left');
+    this.fillSeats();
+    this.broadcastPlayers();
+    this.maybeStart();
   }
 
   // ---------- connection lifecycle ----------
@@ -32,6 +89,7 @@ export class Game {
   connect(socket) {
     this.clients.set(socket.id, { id: socket.id, nickname: null, score: 0, socket });
     socket.emit('players_update', this.playersPayload());
+    socket.emit('extras', this.extrasPayload());
     this.changed();
   }
 
@@ -47,6 +105,7 @@ export class Game {
     else this.queue.push(socket.id);
 
     socket.emit('welcome', { id: socket.id, nickname: client.nickname, ...this.playersPayload() });
+    socket.emit('extras', this.extrasPayload());
     this.broadcastPlayers();
     this.maybeStart();
   }
@@ -60,6 +119,8 @@ export class Game {
       if (this.phase !== 'lobby') this.abortMatch(`${client?.nickname ?? 'Your opponent'} left the game`);
       this.fillSeats();
     }
+    // The bot shouldn't linger alone once every human has left.
+    if (this.bot && ![...this.clients.values()].some((c) => !c.isBot)) return this.removeBot();
     this.broadcastPlayers();
     this.maybeStart();
   }
@@ -76,14 +137,16 @@ export class Game {
   beginGetReady() {
     this.clearTimers();
     // Puzzle is generated before the match begins so the key solution is already on /admin.
-    this.puzzle = generatePuzzle();
+    const diff = DIFFICULTIES[this.difficulty] ?? DIFFICULTIES[DEFAULT_DIFFICULTY];
+    this.puzzle = generatePuzzle({ targetMin: diff.targetMin, targetMax: diff.targetMax });
+    this.matchMs = diff.ms;
     this.matchNo += 1;
     this.phase = 'ready';
     this.rematchVotes.clear();
     this.winnerId = null;
     this.winningExpr = null;
     const startsAt = Date.now() + GET_READY_MS;
-    this.toSeats('get_ready', { startsAt, serverNow: Date.now(), opponent: null, matchNo: this.matchNo });
+    this.toSeats('get_ready', { startsAt, serverNow: Date.now(), opponent: null, matchNo: this.matchNo, mode: this.mode() });
     this.broadcastPlayers();
     this.readyTimer = setTimeout(() => this.startMatch(), GET_READY_MS);
   }
@@ -91,7 +154,7 @@ export class Game {
   startMatch() {
     this.phase = 'playing';
     this.startedAt = Date.now();
-    this.endsAt = this.startedAt + MATCH_MS;
+    this.endsAt = this.startedAt + this.matchMs;
     this.stats = new Map(this.seats.map((id) => [id, { attempts: 0, wrongAttempts: 0, hintsUsed: 0, hintTree: null, solvedAt: null }]));
     this.toSeats('match_start', {
       matchNo: this.matchNo,
@@ -99,12 +162,13 @@ export class Game {
       target: this.puzzle.target,
       endsAt: this.endsAt,
       serverNow: Date.now(),
-      durationMs: MATCH_MS,
+      durationMs: this.matchMs,
       maxHints: MAX_HINTS,
       scores: this.scores(),
+      mode: this.mode(),
     });
     this.broadcastPlayers();
-    this.timer = setTimeout(() => this.endMatch(null, 'timeout'), MATCH_MS);
+    this.timer = setTimeout(() => this.endMatch(null, 'timeout'), this.matchMs);
   }
 
   submit(socket, tokens) {
@@ -131,7 +195,18 @@ export class Game {
     this.phase = 'finished';
     this.winnerId = winnerId;
     const winner = winnerId ? this.clients.get(winnerId) : null;
-    if (winner) winner.score += 1;
+
+    // Win streaks: the winner's streak grows, everyone else's resets. On a timeout both reset.
+    let streak = 0;
+    for (const id of this.seats) {
+      if (id === winnerId) { streak = (this.streaks.get(id) ?? 0) + 1; this.streaks.set(id, streak); }
+      else this.streaks.set(id, 0);
+    }
+    // In streak mode a win is worth its streak length (1, 2, 3…); otherwise a flat point.
+    const pointsAwarded = winner ? (this.streakMode ? streak : 1) : 0;
+    if (winner) winner.score += pointsAwarded;
+    if (winner && !winner.isBot) this.leaderboard.recordWin(winner.nickname, streak);
+
     const base = {
       matchNo: this.matchNo,
       reason,
@@ -140,10 +215,27 @@ export class Game {
       keySolution: this.puzzle.keySolution,
       target: this.puzzle.target,
       scores: this.scores(),
+      streakMode: this.streakMode,
+      pointsAwarded,
+      streak: this.streakMode ? streak : 0,
     };
     for (const id of this.seats) {
       this.clients.get(id)?.socket.emit('match_end', { ...base, result: id === winnerId ? 'win' : 'lost' });
     }
+
+    this.history.unshift({
+      matchNo: this.matchNo,
+      digits: this.puzzle.digits,
+      target: this.puzzle.target,
+      winner: winner?.nickname ?? null,
+      winningExpression: winner ? this.winningExpr : null,
+      keySolution: this.puzzle.keySolution,
+      difficulty: this.difficulty,
+      timedOut: !winner,
+    });
+    this.history = this.history.slice(0, HISTORY_MAX);
+
+    this.broadcastExtras();
     this.broadcastPlayers();
     this.sendIqReport();
   }
@@ -179,6 +271,7 @@ export class Game {
   reset() {
     this.clearTimers();
     for (const c of this.clients.values()) c.score = 0;
+    this.streaks.clear();
     this.phase = 'lobby';
     this.puzzle = null;
     this.rematchVotes.clear();
@@ -246,9 +339,17 @@ export class Game {
 
   playersPayload() {
     const players = [...this.clients.values()].map((c) => ({
-      id: c.id, nickname: c.nickname, score: c.score, status: this.statusOf(c.id),
+      id: c.id, nickname: c.nickname, score: c.score, status: this.statusOf(c.id), isBot: !!c.isBot,
     }));
-    return { players, online: this.clients.size, phase: this.phase, queue: this.queue.map((id) => this.clients.get(id)?.nickname) };
+    return { players, online: this.clients.size, phase: this.phase, queue: this.queue.map((id) => this.clients.get(id)?.nickname), mode: this.mode() };
+  }
+
+  extrasPayload() {
+    return { leaderboard: this.leaderboard.top(10), history: this.history, mode: this.mode() };
+  }
+
+  broadcastExtras() {
+    this.io.emit('extras', this.extrasPayload());
   }
 
   broadcastPlayers() {
@@ -266,6 +367,9 @@ export class Game {
       serverNow: Date.now(),
       rematchVotes: [...this.rematchVotes].map((id) => this.clients.get(id)?.nickname),
       winner: this.winnerId ? this.clients.get(this.winnerId)?.nickname : null,
+      leaderboard: this.leaderboard.top(10),
+      history: this.history,
+      mode: this.mode(),
       match: this.puzzle && {
         digits: this.puzzle.digits,
         target: this.puzzle.target,

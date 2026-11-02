@@ -22,3 +22,8 @@ button.danger:active { transform: translateY(3px); box-shadow: 0 1px 0 #A8303C; 
 :focus-visible { outline: 3px solid var(--tile); outline-offset: 3px; }
 .conn { text-align: center; color: var(--muted); font-size: 14px; }
 @media (max-width: 700px) { main { grid-template-columns: 1fr; } }
+.board { grid-column: 1 / -1; }
+.mode { color: var(--muted); font-size: 14px; margin-top: 12px; }
+.hist { list-style: none; padding: 0; margin: 0; }
+.hist li { display: flex; justify-content: space-between; gap: 12px; padding: 8px 6px; border-bottom: 1px solid rgba(175,192,255,.16); }
+.hist em { color: var(--tile); font-style: normal; font-size: 13px; }

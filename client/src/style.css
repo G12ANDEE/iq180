@@ -162,3 +162,64 @@ button.ghost:active:not(:disabled) { transform: translateY(1px); box-shadow: ins
   *, *::before { animation: none !important; transition: none !important; }
 }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* Single-player: race the AI opponent */
+.bot-panel { max-width: 440px; margin: 0 auto 26px; padding: 16px 18px; border-radius: 14px;
+  background: rgba(175,192,255,.08); box-shadow: inset 0 0 0 2px rgba(175,192,255,.18); text-align: center; }
+.bot-panel p { margin: 0 0 12px; color: var(--muted); font-size: 14px; }
+.bot-btns { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+.bot-btns button { padding: 10px 16px; }
+.pill.playing.bot, .roster li .pill.bot { background: rgba(61,220,151,.18); }
+
+/* ---------- Extra features: toggles, mode picker, boards, streak ---------- */
+
+.topbar .toggles { display: flex; gap: 8px; }
+.chipbtn {
+  font-size: 13px; font-weight: 700; padding: 7px 12px; border-radius: 99px;
+  background: rgba(175,192,255,.14); color: var(--paper); box-shadow: inset 0 0 0 2px rgba(175,192,255,.22);
+}
+.chipbtn:active:not(:disabled) { transform: translateY(1px); box-shadow: inset 0 0 0 2px rgba(175,192,255,.4); }
+
+.mode-panel { max-width: 440px; margin: 0 auto 24px; padding: 14px 16px; border-radius: 14px;
+  background: rgba(175,192,255,.08); box-shadow: inset 0 0 0 2px rgba(175,192,255,.18); }
+.mode-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin: 6px 0; }
+.mode-label { color: var(--muted); font-size: 14px; font-weight: 600; }
+.picker { display: flex; gap: 8px; flex-wrap: wrap; }
+.pickbtn { font-size: 14px; padding: 8px 14px; border-radius: 10px; background: transparent;
+  color: var(--paper); box-shadow: inset 0 0 0 2px rgba(175,192,255,.3); }
+.pickbtn small { opacity: .7; font-weight: 600; }
+.pickbtn.on { background: var(--tile); color: var(--ink); box-shadow: 0 3px 0 var(--tile-edge); }
+.mode-hint { text-align: center; color: var(--muted); font-size: 14px; margin: 24px 0 8px; }
+
+.board { max-width: 440px; margin: 24px auto 0; }
+.board h2 { font-size: 15px; font-weight: 700; color: var(--muted); margin: 0 0 8px; }
+.lb { list-style: none; padding: 0; margin: 0; counter-reset: lb; }
+.lb li { display: flex; align-items: center; gap: 10px; padding: 7px 2px; border-bottom: 1px solid rgba(175,192,255,.14); }
+.lb .rank { width: 22px; text-align: center; color: var(--muted); font-weight: 800; }
+.lb .who { flex: 1; font-weight: 700; }
+.lb .who.you::after { content: ' (you)'; font-weight: 400; color: var(--muted); }
+.lb .w { color: var(--tile); font-weight: 700; font-size: 14px; }
+.hist { list-style: none; padding: 0; margin: 0; }
+.hist li { display: flex; justify-content: space-between; gap: 10px; padding: 7px 2px; border-bottom: 1px solid rgba(175,192,255,.14); font-size: 14px; }
+.hist .hd { color: var(--paper); }
+.hist .hr { color: var(--muted); text-align: right; }
+
+.streak-badge { color: var(--tile); font-weight: 800; font-size: 18px; margin: 6px 0; }
+
+/* ---------- Themes ---------- */
+:root[data-theme="neon"] {
+  --stage: #2A0E52; --stage-deep: #140128; --tile: #FF4FD8; --tile-edge: #B21E96;
+  --ink: #1A0033; --muted: #D6A8FF; --go: #38E0C4; --alarm: #FF5BA0;
+}
+:root[data-theme="neon"] body {
+  background: radial-gradient(120% 70% at 50% -10%, #6A1FB0 0%, transparent 60%),
+    repeating-linear-gradient(90deg, rgba(255,255,255,.04) 0 2px, transparent 2px 80px), var(--stage-deep);
+}
+:root[data-theme="sunset"] {
+  --stage: #7A1E3A; --stage-deep: #2A0A14; --tile: #FFC14D; --tile-edge: #D98A1F;
+  --ink: #2A0A14; --muted: #FFC2A8; --go: #FF8A5B; --alarm: #FF4D5E;
+}
+:root[data-theme="sunset"] body {
+  background: radial-gradient(120% 70% at 50% -10%, #E0542E 0%, transparent 60%),
+    repeating-linear-gradient(90deg, rgba(255,255,255,.04) 0 2px, transparent 2px 80px), var(--stage-deep);
+}
