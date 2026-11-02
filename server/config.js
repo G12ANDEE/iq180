@@ -11,5 +11,9 @@ export const GET_READY_MS = Number(process.env.GET_READY_MS ?? 3_000);
 export const TARGET_MIN = Number(process.env.TARGET_MIN ?? 1);
 export const TARGET_MAX = Number(process.env.TARGET_MAX ?? 99);
 export const MAX_HINTS = 2;
-export const IQ_MODEL = process.env.IQ_MODEL ?? 'claude-opus-5-5';
+// IQ roast LLM: any OpenAI-compatible endpoint. Defaults to Groq's free tier; point at Ollama with
+// LLM_BASE_URL=http://localhost:11434/v1 (no key needed).
+export const LLM_BASE_URL = (process.env.LLM_BASE_URL || 'https://api.groq.com/openai/v1').replace(/\/+$/, '');
+export const LLM_API_KEY = process.env.LLM_API_KEY || process.env.GROQ_API_KEY || '';
+export const LLM_MODEL = process.env.LLM_MODEL || 'openai/gpt-oss-120b';
 export const IQ_TIMEOUT_MS = Number(process.env.IQ_TIMEOUT_MS ?? 8_000);

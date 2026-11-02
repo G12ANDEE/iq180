@@ -1,66 +1,62 @@
-// AI feature: a tongue-in-cheek "IQ" for each player, written by Claude from their match stats.
+// AI feature: a tongue-in-cheek "IQ" for each player, written by an LLM from their match stats.
+// Talks to any OpenAI-compatible chat API (Groq by default, or Ollama/OpenRouter via env vars).
 // Falls back to a local formula when there is no API key, the call fails, or it takes too long.
-import Anthropic from '@anthropic-ai/sdk';
-import { IQ_MODEL, IQ_TIMEOUT_MS } from './config.js';
+import { LLM_BASE_URL, LLM_API_KEY, LLM_MODEL, IQ_TIMEOUT_MS } from './config.js';
 
-const hasCredentials = Boolean(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN);
-const client = hasCredentials ? new Anthropic({ timeout: IQ_TIMEOUT_MS, maxRetries: 0 }) : null;
+// Hosted APIs need a key; a custom endpoint (e.g. local Ollama) may not.
+const enabled = Boolean(LLM_API_KEY) || !LLM_BASE_URL.includes('api.groq.com');
 
 const SYSTEM = `You are the sarcastic-but-kind announcer of IQ180, a party math game where players race to
 reach a target number using five digits with + - x / and parentheses within 60 seconds.
 Given each player's match stats, invent a playful "IQ" (an integer from 60 to 200) and a one-sentence roast
 (max 20 words). Faster correct solves, fewer wrong attempts and fewer hints deserve higher IQs.
-Keep it light, never mean about anything except their arithmetic. Everyone knows the number is a joke.`;
-
-const SCHEMA = {
-  type: 'object',
-  properties: {
-    players: {
-      type: 'array',
-      items: {
-        type: 'object',
-        properties: { name: { type: 'string' }, iq: { type: 'integer' }, roast: { type: 'string' } },
-        required: ['name', 'iq', 'roast'],
-        additionalProperties: false,
-      },
-    },
-  },
-  required: ['players'],
-  additionalProperties: false,
-};
+Keep it light, never mean about anything except their arithmetic. Everyone knows the number is a joke.
+Reply with JSON only, exactly this shape, one entry per player, names copied exactly:
+{"players":[{"name":"<player name>","iq":<integer>,"roast":"<one sentence>"}]}`;
 
 // stats: [{ name, won, timedOut, attempts, wrongAttempts, hintsUsed, secondsToSolve|null, target, digits }]
 export async function iqReport(stats) {
-  if (client) {
+  if (enabled) {
     try {
-      const reports = await askClaude(stats);
+      const reports = await askLLM(stats);
       if (reports) return { source: 'ai', reports };
     } catch (err) {
-      console.warn(`[iq] Claude call failed, using fallback: ${err?.status ?? ''} ${err?.message ?? err}`);
+      console.warn(`[iq] LLM call failed, using fallback: ${err?.message ?? err}`);
     }
   }
   return { source: 'formula', reports: stats.map(fallback) };
 }
 
-async function askClaude(stats) {
-  const response = await client.beta.messages.create({
-    model: IQ_MODEL,
-    max_tokens: 2000,
-    betas: ['server-side-fallback-2026-07-01'],
-    fallbacks: 'default',
-    output_config: { effort: 'low', format: { type: 'json_schema', schema: SCHEMA } },
-    system: SYSTEM,
-    messages: [{ role: 'user', content: `Match stats:\n${JSON.stringify(stats, null, 2)}` }],
+async function askLLM(stats) {
+  const res = await fetch(`${LLM_BASE_URL}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(LLM_API_KEY && { Authorization: `Bearer ${LLM_API_KEY}` }),
+    },
+    signal: AbortSignal.timeout(IQ_TIMEOUT_MS),
+    body: JSON.stringify({
+      model: LLM_MODEL,
+      temperature: 0.9,
+      max_tokens: 1500, // headroom: gpt-oss reasons before answering
+      response_format: { type: 'json_object' },
+      messages: [
+        { role: 'system', content: SYSTEM },
+        { role: 'user', content: `Match stats:\n${JSON.stringify(stats, null, 2)}` },
+      ],
+    }),
   });
-  if (response.stop_reason === 'refusal') return null;
-  const text = response.content.find((b) => b.type === 'text')?.text;
+  if (!res.ok) throw new Error(`HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`);
+  const text = (await res.json())?.choices?.[0]?.message?.content;
   if (!text) return null;
-  const parsed = JSON.parse(text);
+  const players = JSON.parse(text)?.players;
+  if (!Array.isArray(players)) return null;
   // Re-key by the names we sent so a model typo can't drop or swap a player.
   return stats.map((s, i) => {
-    const r = parsed.players.find((p) => p.name === s.name) ?? parsed.players[i];
-    if (!r) return fallback(s);
-    return { name: s.name, iq: Math.max(60, Math.min(200, Math.round(r.iq))), roast: String(r.roast).slice(0, 200) };
+    const r = players.find((p) => p?.name === s.name) ?? players[i];
+    const iq = Number(r?.iq);
+    if (!r || !Number.isFinite(iq) || typeof r.roast !== 'string') return fallback(s);
+    return { name: s.name, iq: Math.max(60, Math.min(200, Math.round(iq))), roast: r.roast.slice(0, 200) };
   });
 }
 

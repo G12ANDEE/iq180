@@ -5,7 +5,8 @@ import { io as connect } from 'socket.io-client';
 
 process.env.MATCH_MS = '1500';
 process.env.GET_READY_MS = '50';
-delete process.env.ANTHROPIC_API_KEY; // keep tests offline: IQ roast uses the formula fallback
+// keep tests offline: empty values block server/.env from enabling the LLM, so the IQ roast uses the formula
+process.env.LLM_API_KEY = process.env.GROQ_API_KEY = process.env.LLM_BASE_URL = '';
 
 const { startServer, isLocalAdmin } = await import('../server/index.js');
 const { solveAll, treeToTokens } = await import('../shared/solver.js');

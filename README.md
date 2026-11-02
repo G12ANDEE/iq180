@@ -39,7 +39,7 @@ On **laptop A**, set up ngrok once:
 
 Copy the same `client/src/config.js` to laptop B (commit it, or AirDrop the project folder).
 
-Optional AI key for the IQ roast: copy `server/.env.example` to `server/.env` and set `ANTHROPIC_API_KEY`. Without a key, a built-in formula is used, so the game still works.
+Optional AI key for the IQ roast: copy `server/.env.example` to `server/.env` and set `GROQ_API_KEY` (free at https://console.groq.com → API Keys). Any OpenAI-compatible endpoint also works via `LLM_BASE_URL`/`LLM_MODEL`, e.g. local Ollama. Without a key, a built-in formula is used, so the game still works.
 
 ## Demo day
 
@@ -89,7 +89,7 @@ npm run client                  # builds, serves the client and opens the browse
 
 | # | Feature | AI |
 |---|---|---|
-| 1 | **Match IQ roast**: after each match, Claude estimates a tongue-in-cheek IQ and writes a one-line roast for each player from their attempts, wrong answers, hints used and solve time | ✓ |
+| 1 | **Match IQ roast**: after each match, an LLM (gpt-oss-120b via Groq) estimates a tongue-in-cheek IQ and writes a one-line roast for each player from their attempts, wrong answers, hints used and solve time | ✓ |
 | 2 | **Solver hints**: an exhaustive expression solver finds real solutions and reveals one sub-step per hint (2 per match, private to that player) | ✓ |
 | 3 | Live expression preview: shows the current value, and the missing-digit warning, as you build | |
 | 4 | Keyboard play: digits, `+ - * / ( )`, Backspace to undo, Esc to clear, Enter to submit | |
