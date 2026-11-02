@@ -36,6 +36,7 @@ export class Game {
     this.streaks = new Map();           // socketId -> current consecutive wins
     this.history = [];                  // recent finished matches, newest first
     this.leaderboard = new Leaderboard();
+    this.adminBotThink = null;          // bot's full solving trace, for the admin page only
   }
 
   // ---------- match mode (difficulty + streak bonus) ----------
@@ -67,6 +68,26 @@ export class Game {
     this.seats.push(bot.id);
     this.broadcastPlayers();
     this.maybeStart();
+  }
+
+  // The bot shares how it reasoned and how many tokens it used, for the human it is racing.
+  // We compare against the previous LLM round so the player can watch the token cost move.
+  botThink({ source, usage, steps, expression, revealMs }) {
+    const total = usage?.totalTokens ?? 0;
+    const prev = source === 'llm' ? (this.lastBotTokens ?? null) : null;
+    if (source === 'llm') this.lastBotTokens = total;
+    // The full solving trace is for the server operator only (admin page) — showing it to the
+    // player would hand them the answer. Players get a progress bar and the token cost, no steps.
+    this.adminBotThink = { matchNo: this.matchNo, source, usage, steps, expression, totalTokens: total };
+    const clientPayload = {
+      matchNo: this.matchNo, source, usage, revealMs, totalSteps: steps.length,
+      totalTokens: total, prevTokens: prev, delta: prev != null ? total - prev : null,
+    };
+    for (const id of this.seats) {
+      const c = this.clients.get(id);
+      if (c && !c.isBot) c.socket.emit('bot_think', clientPayload);
+    }
+    this.changed(); // push the full trace to the admin display
   }
 
   removeBot() {
@@ -142,6 +163,7 @@ export class Game {
     this.matchMs = diff.ms;
     this.matchNo += 1;
     this.phase = 'ready';
+    this.adminBotThink = null;
     this.rematchVotes.clear();
     this.winnerId = null;
     this.winningExpr = null;
@@ -272,6 +294,7 @@ export class Game {
     this.clearTimers();
     for (const c of this.clients.values()) c.score = 0;
     this.streaks.clear();
+    this.lastBotTokens = null;
     this.phase = 'lobby';
     this.puzzle = null;
     this.rematchVotes.clear();
@@ -370,6 +393,7 @@ export class Game {
       leaderboard: this.leaderboard.top(10),
       history: this.history,
       mode: this.mode(),
+      botThink: this.adminBotThink,
       match: this.puzzle && {
         digits: this.puzzle.digits,
         target: this.puzzle.target,

@@ -101,6 +101,7 @@ npm run client                  # builds, serves the client and opens the browse
 | 10 | **Match history**: the last several rounds (digits, target, winner, solution) in the lobby and on `/admin` | |
 | 11 | **Sound effects**: synthesised with the Web Audio API (tile taps, submit, win/lose, final-seconds tick), with a mute toggle | |
 | 12 | **Theme switcher**: Cobalt / Neon / Sunset palettes, remembered across visits | |
+| 13 | **Bot brain cam**: while racing the AI opponent, watch its solving logic appear step by step, with the Groq token cost for the round and how it compares to the previous round (falls back to the solver's own step trace and "0 tokens" when no key is set) | ✓ |
 
 ## Layout
 

@@ -3,6 +3,7 @@
 // it asks the LLM to solve, then submits after a human-like delay set by difficulty.
 import { aiSolve } from './bot-brain.js';
 import { treeToTokens, treeToString } from '../shared/solver.js';
+import { stepsFromTokens } from '../shared/expr.js';
 import { BOT_NAME } from './config.js';
 
 // min/max submit delay (ms, measured from the match start) and the chance it bothers to solve.
@@ -48,6 +49,18 @@ export class Bot {
     const deadline = endsAt ?? startedAt + durationMs;
     const wait = Math.max(0, rand(level.min, level.max) - (Date.now() - startedAt));
     if (Date.now() + wait >= deadline) return; // it would run out of time — stays silent
+
+    // Let the human watch how this AI opponent reasons, and what it cost in tokens.
+    try {
+      const steps = stepsFromTokens(answer.tokens, digits);
+      this.game.botThink({
+        source: answer.usage ? 'llm' : 'solver',
+        usage: answer.usage ?? null,
+        steps,
+        expression: answer.expression,
+        revealMs: wait,
+      });
+    } catch { /* never let the commentary break the bot's move */ }
 
     this.timer = setTimeout(() => {
       this.timer = null;

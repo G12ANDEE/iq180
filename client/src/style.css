@@ -223,3 +223,32 @@ button.ghost:active:not(:disabled) { transform: translateY(1px); box-shadow: ins
   background: radial-gradient(120% 70% at 50% -10%, #E0542E 0%, transparent 60%),
     repeating-linear-gradient(90deg, rgba(255,255,255,.04) 0 2px, transparent 2px 80px), var(--stage-deep);
 }
+
+/* ---------- Bot Brain: live AI solving steps + token meter ---------- */
+.botbrain { max-width: 440px; margin: 20px auto 0; padding: 14px 16px; border-radius: 14px;
+  background: rgba(61,220,151,.08); box-shadow: inset 0 0 0 2px rgba(61,220,151,.28); }
+.botbrain h3 { margin: 0 0 10px; font-size: 15px; color: var(--go); display: flex; align-items: center; gap: 8px; }
+.botbrain h3 .src { margin-left: auto; font-size: 12px; font-weight: 600; color: var(--muted); }
+.botbar { height: 12px; border-radius: 99px; background: rgba(175,192,255,.18); overflow: hidden; }
+.botfill { height: 100%; width: 0; border-radius: 99px; background: linear-gradient(90deg, var(--go), var(--tile));
+  transition: width .2s linear; }
+.botstatus { margin-top: 8px; font-size: 14px; color: var(--paper); display: flex; justify-content: space-between; gap: 10px; }
+.botstatus .botsteps { color: var(--muted); }
+.botbrain .tok { margin-top: 10px; font-size: 14px; color: var(--muted); }
+.botbrain .tok strong { color: var(--tile); }
+.botbrain .tok .delta { color: var(--paper); }
+
+/* ---------- Start menu: choose your opponent ---------- */
+.chooser { max-width: 640px; margin: 0 auto 28px; }
+.choose-h { text-align: center; font-size: 16px; color: var(--muted); font-weight: 600; margin: 0 0 14px; }
+.choose-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.choice { padding: 20px 18px; border-radius: 16px; text-align: center;
+  background: rgba(175,192,255,.08); box-shadow: inset 0 0 0 2px rgba(175,192,255,.2); }
+.choice.bot { background: rgba(61,220,151,.08); box-shadow: inset 0 0 0 2px rgba(61,220,151,.28); }
+.choice .ico { font-size: 40px; line-height: 1; }
+.choice h4 { margin: 10px 0 6px; font-size: 19px; color: var(--paper); }
+.choice p { margin: 0 0 14px; font-size: 14px; color: var(--muted); min-height: 54px; }
+.choice .waitdots { color: var(--tile); font-weight: 700; font-size: 14px; }
+.choice .waitdots::after { content: ''; animation: dots 1.4s steps(4,end) infinite; }
+@keyframes dots { 0% { content: ''; } 25% { content: '.'; } 50% { content: '..'; } 75% { content: '...'; } }
+@media (max-width: 560px) { .choose-cards { grid-template-columns: 1fr; } }

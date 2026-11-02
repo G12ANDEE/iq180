@@ -41,6 +41,7 @@ const state = {
   leaderboard: [], history: [], mode: null,
   theme: localStorage.getItem('iq180:theme') ?? 'cobalt',
   muted: isMuted(),
+  botThink: null,         // bot progress + token usage while racing the AI opponent (no steps — those are admin-only)
 };
 
 let socket;
@@ -71,21 +72,30 @@ async function boot() {
   });
   socket.on('get_ready', ({ startsAt, serverNow: sn }) => {
     state.readyAt = Date.now() + (startsAt - sn);
-    Object.assign(state, { screen: 'ready', end: null, iq: null, votes: [] });
+    Object.assign(state, { screen: 'ready', end: null, iq: null, votes: [], botThink: null });
     render();
     tickClock();
   });
   socket.on('match_start', (m) => {
     state.match = { ...m, offset: m.serverNow - Date.now() };
     if (m.mode) state.mode = m.mode;
-    Object.assign(state, { screen: 'match', tokens: [], hints: [], feedback: null, end: null, iq: null, votes: [] });
+    Object.assign(state, { screen: 'match', tokens: [], hints: [], feedback: null, end: null, iq: null, votes: [], botThink: null });
     sfx.go();
     render();
     tickClock();
   });
   socket.on('submit_rejected', ({ reason }) => { if (state.screen === 'match') { state.feedback = { text: reason, bad: true }; renderSoft(); } });
   socket.on('hint', ({ text }) => { if (text) { state.hints.push(text); sfx.hint(); } else state.feedback = { text: 'No hints left this round', bad: true }; render(); });
-  socket.on('match_end', (e) => { state.end = e; state.screen = 'end'; (e.result === 'win' ? sfx.win : sfx.lose)(); render(); });
+  socket.on('bot_think', (p) => {
+    if (state.screen !== 'match' || p.matchNo !== state.match?.matchNo) return;
+    // Players only get progress + token cost. The actual steps go to the admin page so the
+    // opponent's working is never revealed mid-match.
+    state.botThink = { ...p, startedAt: Date.now() };
+    renderSoft();
+  });
+  socket.on('match_end', (e) => {
+    state.end = e; state.screen = 'end'; (e.result === 'win' ? sfx.win : sfx.lose)(); render();
+  });
   socket.on('iq_report', (r) => { if (r.matchNo === state.end?.matchNo) { state.iq = r; render(); } });
   socket.on('rematch_status', ({ votes }) => { state.votes = votes; render(); });
   socket.on('match_aborted', ({ reason }) => { flash(`${reason}. Back to the lobby.`); state.screen = 'lobby'; state.match = null; render(); });
@@ -163,6 +173,13 @@ function tickClock() {
         el.textContent = `00:${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
         el.classList.toggle('low', s <= 10);
         if (s > 0 && s <= 5 && s !== tickClock.last) { tickClock.last = s; sfx.tick(); }
+      }
+      if (state.botThink) {
+        const pct = botProgress(state.botThink);
+        const fill = document.querySelector('.botfill');
+        if (fill) fill.style.width = `${pct}%`;
+        const label = document.querySelector('.botlabel');
+        if (label && pct >= 100) label.textContent = 'Bot has an answer ready';
       }
     } else clearInterval(clockTimer);
   };
@@ -243,30 +260,45 @@ function historyHtml() {
 
 function viewLobby() {
   const me = state.players.find((p) => p.id === state.me?.id);
-  const named = state.players.filter((p) => p.nickname).length;
   const opp = state.players.find((p) => p.id !== state.me?.id && (p.status === 'ready' || p.status === 'playing'));
-  let line = 'Waiting for an opponent to join…';
-  if (me?.status === 'waiting') line = `A match is in progress. You're number ${state.queue.indexOf(state.me.nickname) + 1} in the queue.`;
-  else if (named >= 2 && me?.status === 'ready') line = 'Opponent found. Starting soon…';
-  const bot = me?.status === 'ready' && !opp
-    ? `<div class="bot-panel">
-        <p>No human around? Race an AI opponent (powered by a free LLM):</p>
-        <div class="bot-btns">
-          <button class="ghost" data-act="addbot" data-diff="easy">AI · Easy</button>
-          <button class="ghost" data-act="addbot" data-diff="medium">AI · Medium</button>
-          <button class="primary" data-act="addbot" data-diff="hard">AI · Hard</button>
-        </div>
-      </div>`
-    : '';
   const seated = me?.status === 'ready';
+  let line = 'Choose how you want to play.';
+  if (me?.status === 'waiting') line = `A match is in progress. You're number ${state.queue.indexOf(state.me.nickname) + 1} in the queue.`;
+  else if (opp) line = `Opponent: ${esc(opp.nickname)}. Starting soon…`;
   return `${topbar()}
     <h2 class="welcome">Welcome, ${esc(state.me.nickname)}.</h2>
     <p class="status-line">${line}</p>
-    ${bot}
-    ${modePanelHtml(seated)}
+    ${chooserHtml(seated && !opp)}
+    ${seated ? modePanelHtml(true) : ''}
     ${rosterHtml()}
     ${leaderboardHtml()}
     ${historyHtml()}`;
+}
+
+// Start menu: pick your opponent. Shown when you hold a seat and nobody else is in the match yet.
+function chooserHtml(show) {
+  if (!show) return '';
+  return `<div class="chooser">
+    <h3 class="choose-h">What do you want to do?</h3>
+    <div class="choose-cards">
+      <article class="choice">
+        <div class="ico">🧑‍🤝‍🧑</div>
+        <h4>Play a person</h4>
+        <p>Wait for another player to open this game. The match starts the moment someone joins.</p>
+        <div class="waitdots">Waiting for an opponent…</div>
+      </article>
+      <article class="choice bot">
+        <div class="ico">🤖</div>
+        <h4>Play the AI bot</h4>
+        <p>Race a Groq-powered opponent right now, and watch it solve. Pick its skill:</p>
+        <div class="bot-btns">
+          <button class="ghost" data-act="addbot" data-diff="easy">Easy</button>
+          <button class="ghost" data-act="addbot" data-diff="medium">Medium</button>
+          <button class="primary" data-act="addbot" data-diff="hard">Hard</button>
+        </div>
+      </article>
+    </div>
+  </div>`;
 }
 
 function opponent() {
@@ -289,6 +321,37 @@ function scoreline() {
     <div class="clock" role="timer">00:01:00</div>
     <div class="p right"><span class="score">${opp?.score ?? 0}</span><span>${esc(opp?.nickname ?? '—')}</span></div>
   </div>`;
+}
+
+// What the player sees of the AI opponent: a solving-progress bar and the token cost — never the
+// actual steps (those are on the admin page), so the opponent's working is not revealed mid-match.
+function botProgress(b) {
+  if (state.screen !== 'match') return 100;          // match over: bot has finished
+  if (!b.revealMs) return 100;
+  return Math.min(100, Math.round(((Date.now() - b.startedAt) / b.revealMs) * 100));
+}
+function botBrainHtml() {
+  const b = state.botThink;
+  if (!b) return '';
+  const pct = botProgress(b);
+  const status = pct >= 100 ? 'Bot has an answer ready' : 'Bot is solving…';
+  let tokenLine;
+  if (b.source === 'llm') {
+    const u = b.usage || {};
+    const delta = b.delta == null ? 'first LLM round this game'
+      : b.delta === 0 ? 'same as last round'
+      : b.delta > 0 ? `▲ ${b.delta} more than last round` : `▼ ${-b.delta} fewer than last round`;
+    tokenLine = `<div class="tok"><strong>${b.totalTokens}</strong> tokens — prompt ${u.promptTokens} + output ${u.completionTokens} · <span class="delta">${delta}</span></div>`;
+  } else {
+    tokenLine = '<div class="tok">Answered by the built-in solver · <strong>0</strong> tokens (no Groq key set)</div>';
+  }
+  const src = b.source === 'llm' ? `Groq${b.usage?.model ? ` · ${esc(b.usage.model)}` : ''}` : 'Exhaustive solver';
+  return `<section class="botbrain">
+    <h3>🤖 Bot brain <span class="src">${src}</span></h3>
+    <div class="botbar"><div class="botfill" style="width:${pct}%"></div></div>
+    <div class="botstatus"><span class="botlabel">${status}</span> <span class="botsteps">${b.totalSteps} step${b.totalSteps === 1 ? '' : 's'}</span></div>
+    ${tokenLine}
+  </section>`;
 }
 
 function viewMatch() {
@@ -319,7 +382,8 @@ function viewMatch() {
       <button class="primary grow" data-act="submit" ${state.tokens.length ? '' : 'disabled'}>Submit answer</button>
     </div>
     <div class="feedback ${state.feedback?.bad ? 'bad' : ''}">${esc(state.feedback?.text ?? '')}</div>
-    ${state.hints.length ? `<ul class="hints">${state.hints.map((h) => `<li>${esc(h)}</li>`).join('')}</ul>` : ''}`;
+    ${state.hints.length ? `<ul class="hints">${state.hints.map((h) => `<li>${esc(h)}</li>`).join('')}</ul>` : ''}
+    ${botBrainHtml()}`;
 }
 
 function viewEnd() {
@@ -346,6 +410,7 @@ function viewEnd() {
       <p>One key solution: <strong>${esc(e.keySolution)} = ${e.target}</strong></p>
     </section>
     <div class="final-scores">${e.scores.map((s) => `<div><span class="score">${s.score}</span>${esc(s.nickname)}</div>`).join('')}</div>
+    ${botBrainHtml()}
     ${iq}
     <div class="center">
       <button class="primary" data-act="rematch" ${iVoted ? 'disabled' : ''}>${iVoted ? 'Waiting for opponent…' : 'Rematch'}</button>

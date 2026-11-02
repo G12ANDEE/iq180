@@ -83,9 +83,11 @@ export async function aiSolve(digits, target) {
     });
     if (!res.ok) { console.warn(`[bot] LLM responded ${res.status}`); return null; }
     const data = await res.json();
+    const u = data.usage ?? {};
+    const usage = { promptTokens: u.prompt_tokens ?? 0, completionTokens: u.completion_tokens ?? 0, totalTokens: u.total_tokens ?? ((u.prompt_tokens ?? 0) + (u.completion_tokens ?? 0)), model: BOT_MODEL };
     for (const expr of candidateExpressions(data.choices?.[0]?.message?.content ?? '')) {
       const tokens = expressionToTokens(expr, digits);
-      if (tokens && judge(tokens, digits, target).ok) return { expression: expr, tokens };
+      if (tokens && judge(tokens, digits, target).ok) return { expression: expr, tokens, usage };
     }
     return null;
   } catch (err) {

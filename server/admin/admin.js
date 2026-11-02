@@ -28,6 +28,17 @@ function render() {
     `<tr><td>${i + 1}</td><td>${esc(r.name)}</td><td>${r.wins}</td><td>${r.bestStreak}</td></tr>`).join('')
     || '<tr><td colspan="4">No wins recorded yet</td></tr>';
 
+  const bt = state.botThink;
+  if (!bt) {
+    $('botbrain').textContent = 'No AI opponent solving this match.';
+  } else {
+    const src = bt.source === 'llm' ? `Groq${bt.usage?.model ? ` · ${esc(bt.usage.model)}` : ''} · ${bt.totalTokens} tokens (prompt ${bt.usage?.promptTokens ?? 0} + output ${bt.usage?.completionTokens ?? 0})` : 'Built-in solver · 0 tokens (no Groq key)';
+    $('botbrain').innerHTML = `
+      <div class="bb-src">${src}</div>
+      <div class="bb-expr">${esc(bt.expression)}</div>
+      <ol class="bb-steps">${bt.steps.map((s) => `<li>${esc(s)}</li>`).join('')}</ol>`;
+  }
+
   $('history').innerHTML = (state.history ?? []).map((h) =>
     `<li><span>${h.digits.join(' ')} → <strong>${h.target}</strong> <em>(${esc(h.difficulty)})</em></span>
        <span>${h.timedOut ? 'no winner' : `${esc(h.winner)}: ${esc(h.winningExpression)}`}</span></li>`).join('')

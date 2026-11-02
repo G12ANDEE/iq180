@@ -80,6 +80,51 @@ export function evaluate(tokens, digits) {
 
 const describe = (tok) => tok.t === 'digit' ? 'digit (no concatenation)' : tok.t === 'op' ? tok.v : tok.t === 'lp' ? '(' : ')';
 
+// Parse a token array into an AST (recording each operation's exact value) and return an ordered,
+// human-readable arithmetic trace, innermost step first: e.g. ["3 + 4 = 7", "7 × 2 = 14"].
+// Used to show how the AI opponent's answer is built, step by step. Assumes valid tokens.
+const STEP_SYM = { '+': '+', '-': '−', 'x': '×', '/': '÷' };
+export function stepsFromTokens(tokens, digits) {
+  let pos = 0;
+  const peek = () => tokens[pos];
+  const mk = (v, op, l, r) => ({ v, op, l, r });
+  function parseExpr() {
+    let left = parseTerm();
+    while (peek()?.t === 'op' && (peek().v === '+' || peek().v === '-')) {
+      const op = tokens[pos++].v, right = parseTerm();
+      left = mk(apply(op, left.v, right.v), op, left, right);
+    }
+    return left;
+  }
+  function parseTerm() {
+    let left = parseFactor();
+    while (peek()?.t === 'op' && (peek().v === 'x' || peek().v === '/')) {
+      const op = tokens[pos++].v, right = parseFactor();
+      left = mk(apply(op, left.v, right.v), op, left, right);
+    }
+    return left;
+  }
+  function parseFactor() {
+    const tok = tokens[pos++];
+    if (!tok) throw new ExprError('Expression is incomplete');
+    if (tok.t === 'digit') return mk(new Fraction(digits[tok.i]));
+    if (tok.t === 'lp') {
+      const v = parseExpr();
+      if (tokens[pos++]?.t !== 'rp') throw new ExprError('Missing )');
+      return v;
+    }
+    throw new ExprError('Unexpected token');
+  }
+  const root = parseExpr();
+  const steps = [];
+  (function walk(n) {
+    if (!n.op) return;
+    walk(n.l); walk(n.r);
+    steps.push(`${n.l.v} ${STEP_SYM[n.op]} ${n.r.v} = ${n.v}`);
+  })(root);
+  return steps;
+}
+
 export function tokensToString(tokens, digits) {
   return tokens.map((t) => t.t === 'digit' ? String(digits[t.i]) : t.t === 'op' ? t.v : t.t === 'lp' ? '(' : ')').join(' ')
     .replace(/\( /g, '(').replace(/ \)/g, ')');

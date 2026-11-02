@@ -27,3 +27,7 @@ button.danger:active { transform: translateY(3px); box-shadow: 0 1px 0 #A8303C; 
 .hist { list-style: none; padding: 0; margin: 0; }
 .hist li { display: flex; justify-content: space-between; gap: 12px; padding: 8px 6px; border-bottom: 1px solid rgba(175,192,255,.16); }
 .hist em { color: var(--tile); font-style: normal; font-size: 13px; }
+.botbrain-admin .bb-src { color: var(--muted); font-size: 14px; margin-bottom: 6px; }
+.botbrain-admin .bb-expr { font-family: 'Bungee', sans-serif; color: var(--go); font-size: 20px; margin-bottom: 8px; }
+.botbrain-admin .bb-steps { margin: 0; padding-left: 20px; }
+.botbrain-admin .bb-steps li { padding: 2px 0; font-variant-numeric: tabular-nums; }
