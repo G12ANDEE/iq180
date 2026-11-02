@@ -129,6 +129,7 @@ button.ghost:active:not(:disabled) { transform: translateY(1px); box-shadow: ins
 .hints { margin: 14px 0 0; padding: 0; list-style: none; }
 .hints li { padding: 10px 14px; border-radius: 10px; background: rgba(255,201,60,.12); color: var(--tile); margin-top: 8px; }
 .hints li::before { content: 'Hint: '; font-weight: 800; }
+.hints li.ai::before { content: 'AI coach: '; }
 
 /* End */
 .verdict { text-align: center; margin: 4vh 0 8px; }

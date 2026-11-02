@@ -5,7 +5,8 @@ import { io as connect } from 'socket.io-client';
 
 process.env.MATCH_MS = '1500';
 process.env.GET_READY_MS = '50';
-delete process.env.ANTHROPIC_API_KEY; // keep tests offline: IQ roast uses the formula fallback
+// keep tests offline: empty values block server/.env from enabling the LLM, so the IQ roast uses the formula
+process.env.LLM_API_KEY = process.env.GROQ_API_KEY = process.env.LLM_BASE_URL = '';
 
 const { startServer, isLocalAdmin } = await import('../server/index.js');
 const { solveAll, treeToTokens } = await import('../shared/solver.js');
@@ -129,4 +130,22 @@ test('admin reset clears scores and notifies clients; admin is blocked through a
   assert.equal(isLocalAdmin('127.0.0.1', { 'x-forwarded-for': '1.2.3.4' }), false);
   assert.equal(isLocalAdmin('192.168.1.50', {}), false);
   close(A, B, adminSock);
+});
+
+test('hints are private, capped at MAX_HINTS, and fall back to solver wording offline', async () => {
+  const { A, B } = await pair();
+  const seenByB = [];
+  B.onAny((ev) => seenByB.push(ev));
+  A.emit('hint');
+  const h1 = await once(A, 'hint');
+  A.emit('hint');
+  const h2 = await once(A, 'hint');
+  A.emit('hint');
+  const h3 = await once(A, 'hint');
+  assert.ok(h1.text && h2.text && h1.text !== h2.text);
+  assert.equal(h1.source, 'solver');
+  assert.equal(h2.used, 2);
+  assert.equal(h3.text, null);
+  assert.ok(!seenByB.includes('hint'), 'B must not see A’s hints');
+  close(A, B);
 });

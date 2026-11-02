@@ -1,7 +1,8 @@
 // The single authoritative game room. Clients only send intents (join, submit, hint, rematch);
 // the server owns the timer, validates answers, decides the winner and keeps the scores.
 import { judge, tokensToString } from '../shared/expr.js';
-import { generatePuzzle, hintsFor } from './generator.js';
+import { generatePuzzle } from './generator.js';
+import { makeHint } from './hint.js';
 import { iqReport } from './iq.js';
 import { Bot } from './bot.js';
 import { Leaderboard } from './leaderboard.js';
@@ -279,15 +280,17 @@ export class Game {
     if (this.seats.every((id) => this.rematchVotes.has(id))) this.beginGetReady();
   }
 
-  hint(socket) {
+  async hint(socket) {
     if (this.phase !== 'playing' || !this.seats.includes(socket.id)) return;
     const st = this.stats.get(socket.id);
     if (st.hintsUsed >= MAX_HINTS) return socket.emit('hint', { text: null, used: st.hintsUsed, max: MAX_HINTS });
     st.hintTree ??= this.puzzle.solutions[Math.floor(Math.random() * this.puzzle.solutions.length)];
-    const hints = hintsFor(st.hintTree);
-    const text = hints[Math.min(st.hintsUsed, hints.length - 1)];
-    st.hintsUsed += 1;
-    socket.emit('hint', { text, used: st.hintsUsed, max: MAX_HINTS }); // private to this player
+    const index = st.hintsUsed;
+    st.hintsUsed += 1; // count before the await so a double-click can't get a free hint
+    const matchNo = this.matchNo;
+    const { text, source } = await makeHint({ tree: st.hintTree, index, digits: this.puzzle.digits, target: this.puzzle.target });
+    if (this.matchNo !== matchNo || this.phase !== 'playing') return; // match ended while the LLM was thinking
+    socket.emit('hint', { text, source, used: index + 1, max: MAX_HINTS }); // private to this player
   }
 
   reset() {

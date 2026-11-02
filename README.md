@@ -39,7 +39,7 @@ On **laptop A**, set up ngrok once:
 
 Copy the same `client/src/config.js` to laptop B (commit it, or AirDrop the project folder).
 
-Optional AI key for the IQ roast: copy `server/.env.example` to `server/.env` and set `ANTHROPIC_API_KEY`. Without a key, a built-in formula is used, so the game still works.
+Optional AI key for the IQ roast: copy `server/.env.example` to `server/.env` and set `GROQ_API_KEY` (free at https://console.groq.com → API Keys). Any OpenAI-compatible endpoint also works via `LLM_BASE_URL`/`LLM_MODEL`, e.g. local Ollama. Without a key, a built-in formula is used, so the game still works.
 
 ## Demo day
 
@@ -89,8 +89,8 @@ npm run client                  # builds, serves the client and opens the browse
 
 | # | Feature | AI |
 |---|---|---|
-| 1 | **Match IQ roast**: after each match, Claude estimates a tongue-in-cheek IQ and writes a one-line roast for each player from their attempts, wrong answers, hints used and solve time | ✓ |
-| 2 | **Solver hints**: an exhaustive expression solver finds real solutions and reveals one sub-step per hint (2 per match, private to that player) | ✓ |
+| 1 | **Match IQ roast**: after each match, an LLM (gpt-oss-120b via Groq) estimates a tongue-in-cheek IQ and writes a one-line roast for each player from their attempts, wrong answers, hints used and solve time | ✓ |
+| 2 | **AI coach hints**: an exhaustive solver picks a real sub-step of a real solution, and the LLM rewrites it as a coach-style nudge. The rewrite is accepted only if it keeps the solver's exact expression and doesn't leak the full answer; otherwise the plain solver hint is shown (2 per match, private to that player) | ✓ |
 | 3 | **AI opponent (bot)**: fills an empty seat and races you, driven by a free LLM (any OpenAI-compatible endpoint; Groq by default), with easy/medium/hard difficulty | ✓ |
 | 4 | Live expression preview: shows the current value, and the missing-digit warning, as you build | |
 | 5 | Keyboard play: digits, `+ - * / ( )`, Backspace to undo, Esc to clear, Enter to submit | |
@@ -106,8 +106,8 @@ npm run client                  # builds, serves the client and opens the browse
 ## Layout
 
 ```
-shared/   fraction.js (exact math) · expr.js (parser + judge) · solver.js (all solutions, hints)
-server/   index.js (Express + socket.io) · game.js (match state machine) · generator.js · iq.js · bot.js · leaderboard.js · admin/
+shared/   fraction.js (exact math) · expr.js (parser + judge) · solver.js (all solutions, hint steps)
+server/   index.js (Express + socket.io) · game.js (match state machine) · generator.js · llm.js (OpenAI-compatible client) · iq.js · hint.js · bot.js · bot-brain.js · leaderboard.js · admin/
 client/   index.html · src/{main.js, net.js, config.js, style.css, sound.js}
 scripts/  tunnel.js (starts ngrok on SERVER_URL)
 tests/    expr, solver/generator, game flow over real sockets

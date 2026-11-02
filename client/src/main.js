@@ -85,7 +85,7 @@ async function boot() {
     tickClock();
   });
   socket.on('submit_rejected', ({ reason }) => { if (state.screen === 'match') { state.feedback = { text: reason, bad: true }; renderSoft(); } });
-  socket.on('hint', ({ text }) => { if (text) { state.hints.push(text); sfx.hint(); } else state.feedback = { text: 'No hints left this round', bad: true }; render(); });
+  socket.on('hint', ({ text, source }) => { if (text) { state.hints.push({ text, ai: source === 'ai' }); sfx.hint(); } else state.feedback = { text: 'No hints left this round', bad: true }; render(); });
   socket.on('bot_think', (p) => {
     if (state.screen !== 'match' || p.matchNo !== state.match?.matchNo) return;
     // Players only get progress + token cost. The actual steps go to the admin page so the
@@ -382,7 +382,7 @@ function viewMatch() {
       <button class="primary grow" data-act="submit" ${state.tokens.length ? '' : 'disabled'}>Submit answer</button>
     </div>
     <div class="feedback ${state.feedback?.bad ? 'bad' : ''}">${esc(state.feedback?.text ?? '')}</div>
-    ${state.hints.length ? `<ul class="hints">${state.hints.map((h) => `<li>${esc(h)}</li>`).join('')}</ul>` : ''}
+    ${state.hints.length ? `<ul class="hints">${state.hints.map((h) => `<li${h.ai ? ' class="ai"' : ''}>${esc(h.text)}</li>`).join('')}</ul>` : ''}
     ${botBrainHtml()}`;
 }
 
@@ -395,7 +395,7 @@ function viewEnd() {
   else detail = `${esc(e.winner)} got there first with <strong>${esc(e.winningExpression)} = ${e.target}</strong>`;
   const iq = state.iq
     ? `<div class="iq">${state.iq.reports.map((r) => `<article><div class="who">${esc(r.name)}'s match IQ</div><div class="num">${r.iq}</div><p class="roast">${esc(r.roast)}</p></article>`).join('')}</div>
-       <p class="iq-note">${state.iq.source === 'ai' ? 'Estimated by Claude from attempts, hints and solve time. Purely for fun.' : 'Estimated from attempts, hints and solve time. Purely for fun.'}</p>`
+       <p class="iq-note">${state.iq.source === 'ai' ? 'Estimated by an AI model from attempts, hints and solve time. Purely for fun.' : 'Estimated from attempts, hints and solve time. Purely for fun.'}</p>`
     : `<p class="iq-note" style="margin-top:0">Measuring brains…</p>`;
   const iVoted = state.votes.includes(state.me.nickname);
   const others = state.votes.filter((n) => n !== state.me.nickname);

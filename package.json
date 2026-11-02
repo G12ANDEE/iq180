@@ -14,7 +14,6 @@
     "node": ">=18"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.131.0",
     "dotenv": "^18.0.5",
     "express": "^5.2.1",
     "socket.io": "^4.8.4"
