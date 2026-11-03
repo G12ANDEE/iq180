@@ -35,6 +35,8 @@ export class Game {
     this.promptTimer = null;  // auto-continue with the bot if the player ignores the prompt
     this.keepBot = false;     // player chose to keep racing the bot; don't re-prompt
     this.bot = null;          // the single AI opponent, if one has been added
+    this.autoStart = false;     // the bot's player explicitly chose to race the humans: no extra click
+    this.wantsPlay = new Set(); // lobby: seated humans who clicked "Play with other players"
     // Extra features: selectable match mode, win streaks, and recent history.
     this.difficulty = DEFAULT_DIFFICULTY;
     this.streakMode = false;
@@ -163,6 +165,7 @@ export class Game {
     const client = this.clients.get(socket.id);
     this.clients.delete(socket.id);
     this.queue = this.queue.filter((id) => id !== socket.id);
+    this.wantsPlay.delete(socket.id);
     // The newcomer who interrupted a bot match left again: carry on, and re-ask for the next one.
     if (this.bot && !this.waitingHumans().length && (this.promptTimer || this.paused || this.keepBot)) {
       this.resume();
@@ -189,17 +192,54 @@ export class Game {
     this.maybeStart();
   }
 
+  // A seated player gives up and goes back to the home (lobby) screen, in any phase.
+  surrender(socket) {
+    const client = this.clients.get(socket.id);
+    if (!client || client.isBot || !this.seats.includes(socket.id)) return;
+    const name = client.nickname ?? 'Your opponent';
+    socket.emit('surrendered');
+    this.seats = this.seats.filter((id) => id !== socket.id);
+    this.rematchVotes.delete(socket.id);
+    this.wantsPlay.delete(socket.id);
+    this.streaks.delete(socket.id);
+    if (this.bot) {                                   // vs the AI: the match just ends
+      this.queue.push(socket.id);
+      return this.removeBot();                        // aborts the match, refills seats, broadcasts
+    }
+    this.queue.push(socket.id);
+    if (this.phase !== 'lobby' && this.seats.length < MIN_PLAYERS) {
+      this.abortMatch(`${name} surrendered`);
+      this.fillSeats();
+    } else if (this.phase === 'finished') {
+      return this.checkRematch();
+    }
+    this.broadcastPlayers();
+    this.maybeStart();
+  }
+
   // ---------- match flow ----------
 
   maybeStart() {
     if (this.phase !== 'lobby') return;
     this.fillSeats();
     if (this.seats.length < MIN_PLAYERS) return this.changed();
+    // Humans are never pulled into a match: it starts once every one of them has opted in.
+    if (!this.bot && !this.autoStart && !this.seats.every((id) => this.wantsPlay.has(id))) return this.broadcastPlayers();
     this.beginGetReady();
+  }
+
+  // A lobby player clicks "Play with other players".
+  playPeople(socket) {
+    if (!this.isSeatedHuman(socket) || this.phase !== 'lobby' || this.bot) return;
+    this.wantsPlay.add(socket.id);
+    this.broadcastPlayers();
+    this.maybeStart();
   }
 
   beginGetReady() {
     this.clearTimers();
+    this.wantsPlay.clear();
+    this.autoStart = false;
     if (!this.bot) this.fillSeats(); // everyone who waited out the last round joins this one
     // Puzzle is generated before the match begins so the key solution is already on /admin.
     const diff = DIFFICULTIES[this.difficulty] ?? DIFFICULTIES[DEFAULT_DIFFICULTY];
@@ -371,6 +411,7 @@ export class Game {
     if (!this.isSeatedHuman(socket) || !this.bot) return;
     if (choice === 'humans') {
       if (!this.waitingHumans().length) return;
+      this.autoStart = true;
       this.removeBot('Switching to the human challenge');
     } else if (choice === 'bot') {
       this.resume();
@@ -491,7 +532,7 @@ export class Game {
 
   playersPayload() {
     const players = [...this.clients.values()].map((c) => ({
-      id: c.id, nickname: c.nickname, score: c.score, status: this.statusOf(c.id), isBot: !!c.isBot,
+      id: c.id, nickname: c.nickname, score: c.score, status: this.statusOf(c.id), isBot: !!c.isBot, wantsPlay: this.wantsPlay.has(c.id),
     }));
     return {
       players, online: this.clients.size, phase: this.phase,

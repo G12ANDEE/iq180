@@ -114,11 +114,12 @@ async function boot() {
     renderSoft();
   });
   socket.on('match_end', (e) => {
-    state.end = e; state.screen = 'end'; (e.result === 'win' ? sfx.win : sfx.lose)(); render();
+    state.end = e; state.screen = 'end'; state.confirmSurrender = false; (e.result === 'win' ? sfx.win : sfx.lose)(); render();
   });
   socket.on('iq_report', (r) => { if (r.matchNo === state.end?.matchNo) { state.iq = r; render(); } });
   socket.on('rematch_status', ({ votes }) => { state.votes = votes; render(); });
-  socket.on('match_aborted', ({ reason }) => { state.invite = null; state.paused = false; flash(`${reason}. Back to the lobby.`); state.screen = 'lobby'; state.match = null; render(); });
+  socket.on('match_aborted', ({ reason }) => { state.confirmSurrender = false; state.invite = null; state.paused = false; flash(`${reason}. Back to the lobby.`); state.screen = 'lobby'; state.match = null; render(); });
+  socket.on('surrendered', () => { state.invite = null; state.paused = false; state.screen = 'lobby'; state.match = null; state.end = null; state.confirmSurrender = false; flash('You surrendered and returned to the homepage.'); });
   socket.on('reset', ({ message }) => { state.invite = null; state.paused = false; flash(message); state.screen = 'lobby'; state.match = null; state.end = null; render(); });
   socket.on('disconnect', () => { flash('Connection lost. Reconnecting…', 0); });
   socket.io.on('reconnect', () => {
@@ -251,11 +252,27 @@ function waitingStripHtml() {
   </div>`;
 }
 
+function surrenderHtml() {
+  if (!state.confirmSurrender) return '';
+  return `<div class="invite-backdrop" role="dialog" aria-modal="true" aria-labelledby="sur-h">
+    <div class="invite">
+      <div class="ico">🏳</div>
+      <h2 id="sur-h">Surrender?</h2>
+      <p>You will return to the homepage. Are you sure you would like to surrender?</p>
+      <div class="invite-btns">
+        <button class="primary" data-act="surrender-yes">Yes, surrender</button>
+        <button class="ghost" data-act="surrender-no">No, keep playing</button>
+      </div>
+    </div>
+  </div>`;
+}
+
 const topbar = () => `
   <header class="topbar">
     <h1 class="brand">IQ180</h1>
     ${state.me ? `<div class="me">Playing as <strong>${esc(state.me.nickname)}</strong> · score <strong>${myScore()}</strong></div>` : ''}
     <div class="toggles">
+      ${['ready', 'match', 'end'].includes(state.screen) ? '<button class="chipbtn danger" data-act="surrender" title="Give up and go to the homepage">🏳 Surrender</button>' : ''}
       <button class="chipbtn" data-act="theme" title="Change theme">${THEME_LABEL[state.theme]}</button>
       <button class="chipbtn" data-act="mute" title="Toggle sound" aria-pressed="${state.muted}">${state.muted ? '🔇 Muted' : '🔊 Sound'}</button>
     </div>
@@ -322,29 +339,36 @@ function viewLobby() {
   const botPlayer = botSeated() && state.players.find((p) => !p.isBot && p.status === 'playing');
   if (me?.status === 'waiting' && botPlayer) line = `${esc(botPlayer.nickname)} is playing the AI bot. They've been asked to let you in…`;
   else if (me?.status === 'waiting') line = "A round is in progress. You'll race in the next one.";
-  else if (opps.length) line = `${opps.length + 1} players: you vs ${names(opps)}. Starting soon…`;
+  else if (seated && opps.length) line = me.wantsPlay
+    ? `Waiting for ${names(opps.filter((o) => !o.wantsPlay)) || 'everyone'} to accept…`
+    : `${names(opps)} ${opps.length === 1 ? 'has' : 'have'} appeared! Click “Play with other players” when you're ready.`;
   return `${topbar()}${waitingStripHtml()}
     <h2 class="welcome">Welcome, ${esc(state.me.nickname)}.</h2>
     <p class="status-line">${line}</p>
-    ${chooserHtml(seated && !opp)}
+    ${chooserHtml(seated, me, opps)}
     ${seated ? modePanelHtml(true) : ''}
     ${rosterHtml()}
     ${historyHtml()}`;
 }
 
 // Start menu: pick your opponent. Shown when you hold a seat and nobody else is in the match yet.
-function chooserHtml(show) {
+function chooserHtml(show, me, opps = []) {
   if (!show) return '';
+  const joined = opps.length > 0;
+  const people = me?.wantsPlay
+    ? `<div class="waitdots">${joined ? 'Waiting for the others to accept…' : 'Waiting for an opponent…'}</div>`
+    : `<button class="primary" data-act="playpeople">Play with other players</button>
+       ${joined ? '' : '<div class="waitdots">No opponent yet. Click to be ready when one joins.</div>'}`;
   return `<div class="chooser">
-    <h3 class="choose-h">What do you want to do?</h3>
+    <h3 class="choose-h">${joined ? 'An opponent appeared!' : 'What do you want to do?'}</h3>
     <div class="choose-cards">
-      <article class="choice">
+      <article class="choice ${joined ? 'appeared' : ''}">
         <div class="ico">🧑‍🤝‍🧑</div>
         <h4>Play people</h4>
-        <p>Everyone who joins races together. The match starts the moment someone else joins.</p>
-        <div class="waitdots">Waiting for an opponent…</div>
+        <p>${joined ? `${names(opps)} ${opps.length === 1 ? 'is' : 'are'} here. The match starts when everyone clicks play.` : 'Everyone who joins races together. The match starts when everyone clicks play.'}</p>
+        ${people}
       </article>
-      <article class="choice bot">
+      ${joined ? '' : `<article class="choice bot">
         <div class="ico">🤖</div>
         <h4>Play the AI bot</h4>
         <p>Race a Groq-powered opponent right now, and watch it solve. Pick its skill:</p>
@@ -353,7 +377,7 @@ function chooserHtml(show) {
           <button class="ghost" data-act="addbot" data-diff="medium">Medium</button>
           <button class="primary" data-act="addbot" data-diff="hard">Hard</button>
         </div>
-      </article>
+      </article>`}
     </div>
   </div>`;
 }
@@ -486,7 +510,7 @@ function viewEnd() {
 const views = { connecting: viewConnecting, nickname: viewNickname, lobby: viewLobby, ready: viewReady, match: viewMatch, end: viewEnd };
 
 function render() {
-  app.innerHTML = views[state.screen]() + inviteHtml() + (state.banner ? `<div class="banner" role="status">${esc(state.banner)}</div>` : '');
+  app.innerHTML = views[state.screen]() + inviteHtml() + surrenderHtml() + (state.banner ? `<div class="banner" role="status">${esc(state.banner)}</div>` : '');
   if (state.screen === 'match' || state.screen === 'ready') tickClock();
   document.getElementById('nick')?.focus();
 }
@@ -519,10 +543,14 @@ app.addEventListener('click', (ev) => {
   else if (act === 'submit') submit();
   else if (act === 'hint') socket.emit('hint');
   else if (act === 'rematch') socket.emit('rematch');
+  else if (act === 'playpeople') socket.emit('play_people');
   else if (act === 'addbot') socket.emit('add_bot', { difficulty: b.dataset.diff });
   else if (act === 'removebot') socket.emit('remove_bot');
   else if (act === 'joinhumans') { state.invite = null; socket.emit('bot_choice', { choice: 'humans' }); render(); }
   else if (act === 'keepbot') { state.invite = null; socket.emit('bot_choice', { choice: 'bot' }); render(); }
+  else if (act === 'surrender') { state.confirmSurrender = true; render(); }
+  else if (act === 'surrender-no') { state.confirmSurrender = false; render(); }
+  else if (act === 'surrender-yes') { state.confirmSurrender = false; socket.emit('surrender'); render(); }
   else if (act === 'mute') { setMuted(!state.muted); state.muted = !state.muted; if (!state.muted) sfx.tap(); render(); }
   else if (act === 'theme') cycleTheme();
   else if (act === 'setdiff') socket.emit('set_mode', { difficulty: b.dataset.diff });

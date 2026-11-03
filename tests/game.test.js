@@ -289,3 +289,25 @@ test('bot: a slow LLM answer for an old match is never played into a newer one',
   bot.cancel();
   assert.equal(submits.length, 0);
 });
+
+test('surrender: vs a person ends the match for the other and sends the surrenderer home', async () => {
+  const { A, B } = await pair('Quit', 'Stay');
+  const home = once(A, 'surrendered');
+  const aborted = once(B, 'match_aborted');
+  A.emit('surrender');
+  await home;
+  assert.match((await aborted).reason, /Quit surrendered/);
+  assert.equal(srv.game.phase, 'lobby');
+  close(A, B);
+});
+
+test('surrender: vs the bot ends the match and removes the bot', async () => {
+  const { A } = await soloVsBot('Giver');
+  const home = once(A, 'surrendered');
+  A.emit('surrender');
+  await home;
+  await new Promise((r) => setTimeout(r, 100));
+  assert.equal(srv.game.bot, null);
+  assert.equal(srv.game.phase, 'lobby');
+  close(A);
+});

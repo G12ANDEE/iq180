@@ -42,8 +42,10 @@ export function startServer({ port = PORT, quiet = false } = {}) {
     game.connect(socket);
     socket.on('join', (p) => game.join(socket, p?.nickname));
     socket.on('submit', (p) => game.submit(socket, p?.tokens));
+    socket.on('surrender', () => game.surrender(socket));
     socket.on('hint', () => game.hint(socket));
     socket.on('rematch', () => game.rematch(socket));
+    socket.on('play_people', () => game.playPeople(socket));
     socket.on('add_bot', (p) => game.addBot(socket, p?.difficulty));
     socket.on('bot_choice', (p) => game.botChoice(socket, p?.choice));
     socket.on('remove_bot', () => game.requestRemoveBot(socket));
