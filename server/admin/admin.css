@@ -1,33 +1,44 @@
-:root { --stage: #0C1D63; --tile: #FFC93C; --ink: #101A4A; --paper: #F5F7FF; --muted: #AFC0FF; --go: #3DDC97; --alarm: #FF5B6B; color-scheme: dark; }
-* { box-sizing: border-box; }
-body { margin: 0; background: var(--stage); color: var(--paper); font: 17px/1.5 'Figtree', system-ui, sans-serif; }
-header { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; padding: 20px 24px; background: rgba(0,0,0,.2); }
-h1 { font-family: 'Bungee', 'Arial Black', sans-serif; color: var(--tile); margin: 0; font-size: 28px; font-weight: 400; }
-h1 span { font-family: 'Figtree', sans-serif; font-weight: 600; color: var(--muted); font-size: 18px; margin-left: 8px; }
-h2 { font-size: 15px; color: var(--muted); font-weight: 600; margin: 0 0 10px; }
-main { display: grid; grid-template-columns: 260px 1fr; gap: 20px; padding: 24px; max-width: 1100px; margin: 0 auto; }
-section { background: rgba(5,12,48,.55); border-radius: 16px; padding: 20px; box-shadow: inset 0 0 0 2px rgba(175,192,255,.16); }
+/* IQ180 operator console — "Arcade Cabinet" pixel theme (matches client/src/style.css). */
+:root {
+  --stage: #0A0A1A; --panel: #14163A; --line: #2A2E73; --cyan: #33D6FF;
+  --tile: #FFD23F; --tile-edge: #C2410C; --ink: #0A0A1A; --paper: #F4F1DE; --muted: #A9A6C9;
+  --go: #3DDC97; --alarm: #FF5D8F;
+  --display: 'Press Start 2P', 'Courier New', monospace; --body: 'VT323', 'Courier New', monospace;
+  --frame: 0 -4px 0 0 var(--line), 0 4px 0 0 var(--line), -4px 0 0 0 var(--line), 4px 0 0 0 var(--line);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; border-radius: 0; }
+body { margin: 0; background: var(--stage); color: var(--paper); font: 24px/1.2 var(--body); image-rendering: pixelated; }
+body::after { content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 100; background: repeating-linear-gradient(0deg, rgba(0,0,0,.3) 0 1px, transparent 1px 4px); }
+header { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; padding: 24px; box-shadow: 0 4px 0 0 var(--line); }
+h1 { font: 400 22px/1.3 var(--display); color: var(--tile); margin: 0; }
+h1 span { font: 12px var(--display); color: var(--cyan); margin-left: 14px; }
+h2 { font: 400 12px/1.4 var(--display); color: var(--cyan); margin: 0 0 14px; }
+main { display: grid; grid-template-columns: 260px 1fr; gap: 28px; padding: 32px 28px; max-width: 1100px; margin: 0 auto; }
+section { background: var(--panel); padding: 20px; box-shadow: var(--frame); min-width: 0; }
 .clients { grid-column: 1 / -1; }
 .online { text-align: center; color: var(--muted); }
-.big { font-family: 'Bungee', sans-serif; font-size: 96px; line-height: 1; color: var(--tile); }
-.solution { font-family: 'Bungee', sans-serif; font-size: clamp(26px, 4vw, 40px); color: var(--go); margin: 6px 0 12px; }
-.digits span { display: inline-block; min-width: 40px; text-align: center; font-family: 'Bungee', sans-serif; font-size: 24px; background: var(--tile); color: var(--ink); border-radius: 8px; padding: 4px 8px; margin-right: 6px; }
-.meta { color: var(--muted); margin-top: 10px; }
-.alts { color: var(--muted); font-size: 15px; margin: 6px 0 0; padding-left: 18px; }
+.big { font: 72px/1.3 var(--display); color: var(--tile); text-shadow: 5px 5px 0 var(--tile-edge); }
+.solution { font: clamp(16px, 3vw, 24px)/1.5 var(--display); color: var(--go); margin: 6px 0 14px; }
+.digits span { display: inline-block; min-width: 40px; text-align: center; font: 18px var(--display); background: var(--tile); color: var(--ink); padding: 8px 10px; margin-right: 8px; }
+.meta { color: var(--muted); margin-top: 12px; }
+.alts { color: var(--muted); margin: 6px 0 0; padding-left: 22px; }
 table { width: 100%; border-collapse: collapse; }
-th, td { text-align: left; padding: 10px 6px; border-bottom: 1px solid rgba(175,192,255,.16); }
-th { color: var(--muted); font-weight: 600; font-size: 15px; }
-button.danger { font: 800 16px 'Figtree', sans-serif; border: 0; border-radius: 12px; padding: 12px 20px; background: var(--alarm); color: #fff; cursor: pointer; box-shadow: 0 4px 0 #A8303C; }
-button.danger:active { transform: translateY(3px); box-shadow: 0 1px 0 #A8303C; }
-:focus-visible { outline: 3px solid var(--tile); outline-offset: 3px; }
-.conn { text-align: center; color: var(--muted); font-size: 14px; }
-@media (max-width: 700px) { main { grid-template-columns: 1fr; } }
+th, td { text-align: left; padding: 8px 6px; box-shadow: inset 0 -2px 0 0 var(--line); }
+th { color: var(--muted); font: 400 10px/1.4 var(--display); }
+button.danger { font: 12px/1.3 var(--display); border: 0; padding: 14px 18px; min-height: 48px; background: var(--alarm); color: var(--ink); cursor: pointer; box-shadow: 0 -4px 0 0 #000, 0 4px 0 0 #000, -4px 0 0 0 #000, 4px 0 0 0 #000, inset 0 -8px 0 0 #A3284F; }
+button.danger:active { transform: translateY(2px); box-shadow: 0 -4px 0 0 #000, 0 4px 0 0 #000, -4px 0 0 0 #000, 4px 0 0 0 #000, inset 0 -3px 0 0 #A3284F; }
+:focus-visible { outline: 4px solid var(--cyan); outline-offset: 4px; }
+.conn { text-align: center; color: var(--muted); padding-bottom: 24px; }
+@media (max-width: 700px) { main { grid-template-columns: 1fr; padding: 24px 20px; } }
 .board { grid-column: 1 / -1; }
-.mode { color: var(--muted); font-size: 14px; margin-top: 12px; }
+.mode { color: var(--muted); margin-top: 14px; }
 .hist { list-style: none; padding: 0; margin: 0; }
-.hist li { display: flex; justify-content: space-between; gap: 12px; padding: 8px 6px; border-bottom: 1px solid rgba(175,192,255,.16); }
-.hist em { color: var(--tile); font-style: normal; font-size: 13px; }
-.botbrain-admin .bb-src { color: var(--muted); font-size: 14px; margin-bottom: 6px; }
-.botbrain-admin .bb-expr { font-family: 'Bungee', sans-serif; color: var(--go); font-size: 20px; margin-bottom: 8px; }
-.botbrain-admin .bb-steps { margin: 0; padding-left: 20px; }
+.hist li { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; box-shadow: inset 0 -2px 0 0 var(--line); }
+.hist em { color: var(--tile); font-style: normal; }
+.botbrain-admin { background: #000; }
+.botbrain-admin h2 { color: var(--alarm); }
+.botbrain-admin .bb-src { color: var(--muted); margin-bottom: 8px; }
+.botbrain-admin .bb-expr { font: 16px/1.5 var(--display); color: var(--go); margin-bottom: 10px; }
+.botbrain-admin .bb-steps { margin: 0; padding-left: 24px; }
 .botbrain-admin .bb-steps li { padding: 2px 0; font-variant-numeric: tabular-nums; }

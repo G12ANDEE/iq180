@@ -10,7 +10,7 @@ const OPS = [['+', '+'], ['-', '−'], ['x', '×'], ['/', '÷']];
 
 // Theme switcher: one of a few palettes, remembered across visits. Applied as data-theme on <html>.
 const THEMES = ['cobalt', 'neon', 'sunset'];
-const THEME_LABEL = { cobalt: '🔵 Cobalt', neon: '🟣 Neon', sunset: '🌅 Sunset' };
+const THEME_LABEL = { cobalt: '🕹 Arcade', neon: '🟣 Neon', sunset: '🌅 Amber' };
 function applyTheme(name) {
   const t = THEMES.includes(name) ? name : 'cobalt';
   document.documentElement.dataset.theme = t;
