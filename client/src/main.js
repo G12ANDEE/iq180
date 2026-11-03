@@ -38,7 +38,7 @@ const state = {
   votes: [],
   banner: null,
   // Extra features
-  leaderboard: [], history: [], mode: null,
+  history: [], mode: null,
   theme: localStorage.getItem('iq180:theme') ?? 'cobalt',
   muted: isMuted(),
   paused: false,          // server paused a bot match because a human showed up
@@ -83,7 +83,7 @@ async function boot() {
     if (state.match) Object.assign(state.match, { endsAt, offset: sn - Date.now(), pausedLeft: null });
     render();
   });
-  socket.on('extras', (e) => { Object.assign(state, { leaderboard: e.leaderboard ?? [], history: e.history ?? [], mode: e.mode ?? state.mode }); if (['lobby', 'end'].includes(state.screen)) renderSoft(); });
+  socket.on('extras', (e) => { Object.assign(state, { history: e.history ?? [], mode: e.mode ?? state.mode }); if (['lobby', 'end'].includes(state.screen)) renderSoft(); });
   socket.on('join_error', ({ reason }) => { state.joinError = reason; render(); });
   socket.on('welcome', (p) => {
     state.me = { id: p.id, nickname: p.nickname };
@@ -305,13 +305,6 @@ function modePanelHtml(editable) {
   </div>`;
 }
 
-function leaderboardHtml() {
-  if (!state.leaderboard?.length) return '';
-  const rows = state.leaderboard.map((r, i) =>
-    `<li><span class="rank">${i + 1}</span><span class="who ${r.name === state.me?.nickname ? 'you' : ''}">${esc(r.name)}</span><span class="w">${r.wins} win${r.wins === 1 ? '' : 's'}${r.bestStreak > 1 ? ` · 🔥${r.bestStreak}` : ''}</span></li>`).join('');
-  return `<section class="board"><h2>🏆 All-time leaderboard</h2><ol class="lb">${rows}</ol></section>`;
-}
-
 function historyHtml() {
   if (!state.history?.length) return '';
   const rows = state.history.map((h) =>
@@ -336,7 +329,6 @@ function viewLobby() {
     ${chooserHtml(seated && !opp)}
     ${seated ? modePanelHtml(true) : ''}
     ${rosterHtml()}
-    ${leaderboardHtml()}
     ${historyHtml()}`;
 }
 
@@ -488,7 +480,6 @@ function viewEnd() {
       <div class="votes">${others.length ? `${esc(others.join(', '))} wants a rematch.` : ''}</div>
     </div>
     ${seated ? `<p class="mode-hint">Mode for the rematch:</p>${modePanelHtml(true)}` : ''}
-    ${leaderboardHtml()}
     ${historyHtml()}`;
 }
 

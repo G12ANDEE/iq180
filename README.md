@@ -97,7 +97,6 @@ npm run client                  # builds, serves the client and opens the browse
 | 6 | Waiting queue for 3+ clients with automatic seat promotion | |
 | 7 | **Difficulty modes** (separate mode): Easy / Normal / Hard change the target range and the countdown length; picked in the lobby and shown on `/admin` | |
 | 8 | **Win-streak bonus** (separate mode): consecutive wins are worth escalating points (1, 2, 3…) instead of a flat point | |
-| 9 | **All-time leaderboard**: wins and best streak per nickname, persisted to disk, shown in the lobby and on `/admin` | |
 | 10 | **Match history**: the last several rounds (digits, target, winner, solution) in the lobby and on `/admin` | |
 | 11 | **Sound effects**: synthesised with the Web Audio API (tile taps, submit, win/lose, final-seconds tick), with a mute toggle | |
 | 12 | **Theme switcher**: Cobalt / Neon / Sunset palettes, remembered across visits | |
@@ -108,7 +107,7 @@ npm run client                  # builds, serves the client and opens the browse
 
 ```
 shared/   fraction.js (exact math) · expr.js (parser + judge) · solver.js (all solutions, hint steps)
-server/   index.js (Express + socket.io) · game.js (match state machine) · generator.js · llm.js (OpenAI-compatible client) · iq.js · hint.js · bot.js · bot-brain.js · leaderboard.js · admin/
+server/   index.js (Express + socket.io) · game.js (match state machine) · generator.js · llm.js (OpenAI-compatible client) · iq.js · hint.js · bot.js · bot-brain.js · admin/
 client/   index.html · src/{main.js, net.js, config.js, style.css, sound.js}
 scripts/  tunnel.js (starts ngrok on SERVER_URL)
 tests/    expr, solver/generator, game flow over real sockets

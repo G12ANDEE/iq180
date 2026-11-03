@@ -24,10 +24,6 @@ function render() {
     $('mode').textContent = `Mode: difficulty ${d?.label ?? state.mode.difficulty} (${d?.seconds ?? '?'}s) · win-streak bonus ${state.mode.streakMode ? 'ON' : 'off'}`;
   }
 
-  $('leaderboard').innerHTML = (state.leaderboard ?? []).map((r, i) =>
-    `<tr><td>${i + 1}</td><td>${esc(r.name)}</td><td>${r.wins}</td><td>${r.bestStreak}</td></tr>`).join('')
-    || '<tr><td colspan="4">No wins recorded yet</td></tr>';
-
   const bt = state.botThink;
   if (!bt) {
     $('botbrain').textContent = 'No AI opponent solving this match.';

@@ -5,7 +5,6 @@ import { generatePuzzle } from './generator.js';
 import { makeHint } from './hint.js';
 import { iqReport } from './iq.js';
 import { Bot } from './bot.js';
-import { Leaderboard } from './leaderboard.js';
 import { GET_READY_MS, MAX_HINTS, DIFFICULTIES, DEFAULT_DIFFICULTY, BOT_PROMPT_MS } from './config.js';
 
 // Everyone in the room races the same puzzle; a match needs at least two players (or one + the bot).
@@ -36,13 +35,12 @@ export class Game {
     this.promptTimer = null;  // auto-continue with the bot if the player ignores the prompt
     this.keepBot = false;     // player chose to keep racing the bot; don't re-prompt
     this.bot = null;          // the single AI opponent, if one has been added
-    // Extra features: selectable match mode, win streaks, recent history and an all-time board.
+    // Extra features: selectable match mode, win streaks, and recent history.
     this.difficulty = DEFAULT_DIFFICULTY;
     this.streakMode = false;
     this.matchMs = DIFFICULTIES[DEFAULT_DIFFICULTY].ms;
     this.streaks = new Map();           // socketId -> current consecutive wins
     this.history = [];                  // recent finished matches, newest first
-    this.leaderboard = new Leaderboard();
     this.adminBotThink = null;          // bot's full solving trace, for the admin page only
   }
 
@@ -279,7 +277,6 @@ export class Game {
     // In streak mode a win is worth its streak length (1, 2, 3…); otherwise a flat point.
     const pointsAwarded = winner ? (this.streakMode ? streak : 1) : 0;
     if (winner) winner.score += pointsAwarded;
-    if (winner && !winner.isBot) this.leaderboard.recordWin(winner.nickname, streak);
 
     const base = {
       matchNo: this.matchNo,
@@ -504,7 +501,7 @@ export class Game {
   }
 
   extrasPayload() {
-    return { leaderboard: this.leaderboard.top(10), history: this.history, mode: this.mode() };
+    return { history: this.history, mode: this.mode() };
   }
 
   broadcastExtras() {
@@ -526,7 +523,6 @@ export class Game {
       serverNow: Date.now(),
       rematchVotes: [...this.rematchVotes].map((id) => this.clients.get(id)?.nickname),
       winner: this.winnerId ? this.clients.get(this.winnerId)?.nickname : null,
-      leaderboard: this.leaderboard.top(10),
       history: this.history,
       mode: this.mode(),
       botThink: this.adminBotThink,
