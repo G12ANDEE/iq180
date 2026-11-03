@@ -31,6 +31,9 @@ async function pair(a = 'Alice', b = 'Bob') {
   A.emit('join', { nickname: a });
   const w = await welcomeA;
   B.emit('join', { nickname: b });
+  await once(B, 'welcome');
+  assert.equal(srv.game.phase, 'lobby', 'two humans must not be forced into a match');
+  A.emit('play_people'); B.emit('play_people');
   return { A, B, welcome: w, mA: await startA, mB: await startB };
 }
 const open = new Set();
@@ -112,7 +115,8 @@ test('duplicate nickname gets a suffix; third client queues; disconnect mid-matc
   const cStarts = once(C, 'match_start');
   B.close();
   assert.match((await aborted).reason, /left/);
-  await cStarts; // Cleo takes the free seat and a fresh match starts
+  A.emit('play_people'); C.emit('play_people'); // Cleo takes the free seat; both opt in
+  await cStarts;
   close(A, C);
 });
 
