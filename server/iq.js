@@ -5,7 +5,7 @@ import { llmEnabled, chatJSON } from './llm.js';
 
 const SYSTEM = `You are the sarcastic-but-kind announcer of IQ180, a party math game where players race to
 reach a target number using five digits with + - x / and parentheses within 60 seconds.
-Given each player's match stats, invent a playful "IQ" (an integer from 60 to 200) and a one-sentence roast
+Given each player's match stats, invent a playful "IQ" (an integer from 0 to 180) and a one-sentence roast
 (max 20 words). Faster correct solves, fewer wrong attempts and fewer hints deserve higher IQs.
 Keep it light, never mean about anything except their arithmetic. Everyone knows the number is a joke.
 Reply with JSON only, exactly this shape, one entry per player, names copied exactly:
@@ -33,7 +33,7 @@ async function askLLM(stats) {
     const r = players.find((p) => p?.name === s.name) ?? players[i];
     const iq = Number(r?.iq);
     if (!r || !Number.isFinite(iq) || typeof r.roast !== 'string') return fallback(s);
-    return { name: s.name, iq: Math.max(60, Math.min(200, Math.round(iq))), roast: r.roast.slice(0, 200) };
+    return { name: s.name, iq: Math.max(0, Math.min(180, Math.round(iq))), roast: r.roast.slice(0, 200) };
   });
 }
 
@@ -42,7 +42,7 @@ function fallback(s) {
   if (s.won) iq += 25 + Math.max(0, 60 - (s.secondsToSolve ?? 60)) * 0.6;
   else if (s.timedOut) iq -= 5;
   iq -= s.wrongAttempts * 4 + s.hintsUsed * 8;
-  iq = Math.max(60, Math.min(200, Math.round(iq)));
+  iq = Math.max(0, Math.min(180, Math.round(iq)));
   const roast = s.won
     ? (s.hintsUsed ? 'Won with training wheels on. Still counts. Barely.' : 'Pure brain power. Or a lucky guess. We will never know.')
     : s.wrongAttempts > 2 ? 'Bold strategy: try every wrong answer first.'
