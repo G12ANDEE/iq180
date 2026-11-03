@@ -414,6 +414,7 @@ function viewEnd() {
     ${iq}
     <div class="center">
       <button class="primary" data-act="rematch" ${iVoted ? 'disabled' : ''}>${iVoted ? 'Waiting for opponent…' : 'Rematch'}</button>
+      ${state.players.some((p) => p.isBot) ? '<button class="ghost" data-act="removebot">Back to menu</button>' : ''}
       <div class="votes">${others.length ? `${esc(others.join(', '))} wants a rematch.` : ''}</div>
     </div>
     ${seated ? `<p class="mode-hint">Mode for the rematch:</p>${modePanelHtml(true)}` : ''}
@@ -458,6 +459,7 @@ app.addEventListener('click', (ev) => {
   else if (act === 'hint') socket.emit('hint');
   else if (act === 'rematch') socket.emit('rematch');
   else if (act === 'addbot') socket.emit('add_bot', { difficulty: b.dataset.diff });
+  else if (act === 'removebot') socket.emit('remove_bot');
   else if (act === 'mute') { setMuted(!state.muted); state.muted = !state.muted; if (!state.muted) sfx.tap(); render(); }
   else if (act === 'theme') cycleTheme();
   else if (act === 'setdiff') socket.emit('set_mode', { difficulty: b.dataset.diff });

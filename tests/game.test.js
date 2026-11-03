@@ -149,3 +149,76 @@ test('hints are private, capped at MAX_HINTS, and fall back to solver wording of
   assert.ok(!seenByB.includes('hint'), 'B must not see A’s hints');
   close(A, B);
 });
+
+// ---------- AI opponent ----------
+
+const { Bot } = await import('../server/bot.js');
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+
+test('bot: only a seated human can add/remove it; it steps aside on rematch when a human is queued', async () => {
+  const A = client(), B = client();
+  const welcomeA = once(A, 'welcome');
+  A.emit('join', { nickname: 'Solo' });
+  await welcomeA;
+  const startA = once(A, 'match_start');
+  A.emit('add_bot', { difficulty: 'hard' });
+  const m = await startA;
+  assert.ok(srv.game.bot, 'bot seated');
+
+  const welcomeB = once(B, 'welcome');
+  B.emit('join', { nickname: 'Waiter' });
+  await welcomeB;
+  B.emit('remove_bot');                       // queued player: must be ignored
+  await wait(100);
+  assert.ok(srv.game.bot, 'queued player cannot remove the bot');
+  assert.equal(srv.game.phase, 'playing');
+
+  const endA = once(A, 'match_end');
+  A.emit('submit', { tokens: answerFor(m) });
+  await endA;
+  const aborted = once(A, 'match_aborted'), nextA = once(A, 'match_start'), nextB = once(B, 'match_start');
+  A.emit('rematch');
+  assert.match((await aborted).reason, /stepped aside/);
+  await Promise.all([nextA, nextB]);
+  assert.equal(srv.game.bot, null);
+  close(A, B);
+});
+
+test('bot: leaves with its human instead of being handed to the next player', async () => {
+  const A = client();
+  const welcomeA = once(A, 'welcome');
+  A.emit('join', { nickname: 'Leaver' });
+  await welcomeA;
+  const startA = once(A, 'match_start');
+  A.emit('add_bot', { difficulty: 'hard' });
+  await startA;
+  A.close();
+  await wait(150);
+  assert.equal(srv.game.bot, null);
+
+  const C = client();
+  const welcomeC = once(C, 'welcome');
+  C.emit('join', { nickname: 'Newcomer' });
+  await welcomeC;
+  await wait(150);
+  assert.equal(srv.game.phase, 'lobby', 'newcomer must not be dropped into a bot match');
+  close(C);
+});
+
+test('bot: a slow LLM answer for an old match is never played into a newer one', async () => {
+  const tree = [...solveAll([1, 2, 3, 4, 5]).values()][0][0];
+  const submits = [];
+  const game = { bot: null, phase: 'playing', matchNo: 1, puzzle: { solutions: [tree] }, submit: (...a) => submits.push(a), botThink() {} };
+  const bot = new Bot(game, 'hard');
+  game.bot = bot;
+
+  const stale = bot.play({ matchNo: 1, digits: [1, 2, 3, 4, 5], target: 1, endsAt: Date.now() + 60_000 });
+  game.matchNo = 2;                           // a rematch started while the answer was in flight
+  await stale;
+  assert.equal(bot.timer, null, 'stale answer must not be scheduled');
+
+  await bot.play({ matchNo: 2, digits: [1, 2, 3, 4, 5], target: 1, endsAt: Date.now() + 60_000 });
+  assert.ok(bot.timer, 'live answer is scheduled');
+  bot.cancel();
+  assert.equal(submits.length, 0);
+});

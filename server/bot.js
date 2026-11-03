@@ -36,14 +36,18 @@ export class Bot {
 
   cancel() { clearTimeout(this.timer); this.timer = null; }
 
-  async play({ digits, target, durationMs, endsAt }) {
+  async play({ matchNo, digits, target, durationMs, endsAt }) {
     this.cancel();
     const level = LEVELS[this.difficulty];
     const willSolve = Math.random() < level.solveProb;
     const startedAt = Date.now();
+    // The LLM call can outlive the match it was made for (opponent wins fast, rematch starts).
+    // Only act while that same match is still being played by this bot.
+    const stillLive = () => this.game.bot === this && this.game.phase === 'playing' && this.game.matchNo === matchNo;
 
     // Reuse the verified LLM answer; fall back to a known solution so the bot can always act.
     const answer = (await aiSolve(digits, target)) ?? this.fallbackAnswer();
+    if (!stillLive()) return;          // stale: a later match is running, or this bot was removed
     if (!answer || !willSolve) return; // no answer, or the bot "can't get it" this round
 
     const deadline = endsAt ?? startedAt + durationMs;
@@ -62,8 +66,10 @@ export class Bot {
       });
     } catch { /* never let the commentary break the bot's move */ }
 
+    this.cancel();
     this.timer = setTimeout(() => {
       this.timer = null;
+      if (!stillLive()) return;
       console.log(`[bot] ${this.nickname} answers: ${answer.expression}`);
       this.game.submit(this.socket, answer.tokens);
     }, wait);

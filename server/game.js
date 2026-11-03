@@ -61,7 +61,14 @@ export class Game {
 
   // ---------- AI opponent ----------
 
-  addBot(difficulty) {
+  // Only a seated human can call in the bot (or send it away below).
+  isSeatedHuman(socket) {
+    const c = this.clients.get(socket?.id);
+    return Boolean(c && !c.isBot && c.nickname && this.seats.includes(socket.id));
+  }
+
+  addBot(socket, difficulty) {
+    if (!this.isSeatedHuman(socket)) return;
     if (this.bot || this.phase !== 'lobby' || this.seats.length >= SEATS) return;
     const bot = new Bot(this, difficulty);
     this.bot = bot;
@@ -91,7 +98,12 @@ export class Game {
     this.changed(); // push the full trace to the admin display
   }
 
-  removeBot() {
+  // Called by a seated human from the end screen ("Back to menu"), or internally.
+  requestRemoveBot(socket) {
+    if (this.isSeatedHuman(socket)) this.removeBot();
+  }
+
+  removeBot(reason = 'The AI opponent left') {
     if (!this.bot) return;
     const id = this.bot.id;
     this.bot.cancel();
@@ -100,7 +112,8 @@ export class Game {
     this.seats = this.seats.filter((x) => x !== id);
     this.queue = this.queue.filter((x) => x !== id);
     this.bot = null;
-    if (wasSeated && this.phase !== 'lobby') this.abortMatch('The AI opponent left');
+    this.streaks.delete(id);
+    if (wasSeated && this.phase !== 'lobby') this.abortMatch(reason);
     this.fillSeats();
     this.broadcastPlayers();
     this.maybeStart();
@@ -139,10 +152,11 @@ export class Game {
     if (this.seats.includes(socket.id)) {
       this.seats = this.seats.filter((id) => id !== socket.id);
       if (this.phase !== 'lobby') this.abortMatch(`${client?.nickname ?? 'Your opponent'} left the game`);
+      // The bot was this player's chosen opponent; it leaves with them rather than being
+      // handed to whoever joins next.
+      if (this.bot && this.seats.includes(this.bot.id)) return this.removeBot();
       this.fillSeats();
     }
-    // The bot shouldn't linger alone once every human has left.
-    if (this.bot && ![...this.clients.values()].some((c) => !c.isBot)) return this.removeBot();
     this.broadcastPlayers();
     this.maybeStart();
   }
@@ -274,6 +288,11 @@ export class Game {
   rematch(socket) {
     if (this.phase !== 'finished' || !this.seats.includes(socket.id)) return;
     this.rematchVotes.add(socket.id);
+    // A real person is waiting in the queue: the bot steps aside so the rematch is human vs human.
+    const waitingHuman = this.queue.map((id) => this.clients.get(id)).find((c) => c && !c.isBot);
+    if (this.bot && this.seats.includes(this.bot.id) && waitingHuman && !this.clients.get(socket.id)?.isBot) {
+      return this.removeBot(`The AI opponent stepped aside so you can play ${waitingHuman.nickname}`);
+    }
     const votes = [...this.rematchVotes].map((id) => this.clients.get(id)?.nickname);
     this.toSeats('rematch_status', { votes, needed: SEATS });
     this.changed();
@@ -295,6 +314,7 @@ export class Game {
 
   reset() {
     this.clearTimers();
+    this.bot?.cancel(); // the bot isn't on io, so it never hears the 'reset' broadcast below
     for (const c of this.clients.values()) c.score = 0;
     this.streaks.clear();
     this.lastBotTokens = null;

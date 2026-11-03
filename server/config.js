@@ -33,6 +33,6 @@ export const IQ_TIMEOUT_MS = Number(process.env.IQ_TIMEOUT_MS ?? 8_000);
 // AI opponent (free LLM via any OpenAI-compatible endpoint; Groq by default).
 export const BOT_BASE_URL = process.env.BOT_BASE_URL ?? 'https://api.groq.com/openai/v1';
 export const BOT_MODEL = process.env.BOT_MODEL ?? 'qwen/qwen3.8-27b';
-export const BOT_API_KEY = process.env.GROQ_API_KEY ?? process.env.BOT_API_KEY ?? '';
+export const BOT_API_KEY = process.env.GROQ_API_KEY || process.env.BOT_API_KEY || '';
 export const BOT_TIMEOUT_MS = Number(process.env.BOT_TIMEOUT_MS ?? 15_000);
 export const BOT_NAME = process.env.BOT_NAME ?? '🤖 Groq Bot';
