@@ -21,6 +21,7 @@ export class Bot {
     this.difficulty = LEVELS[difficulty] ? difficulty : 'medium';
     this.id = `bot:${Math.random().toString(36).slice(2, 8)}`;
     this.timer = null;
+    this.pending = null; // { tokens, expression, fireAt } — the answer it is about to submit
     this.socket = { id: this.id, emit: (event, payload) => this.onEvent(event, payload) };
   }
 
@@ -34,7 +35,34 @@ export class Bot {
     else if (event === 'match_end') { this.cancel(); this.game.rematch(this.socket); } // always up for a rematch
   }
 
-  cancel() { clearTimeout(this.timer); this.timer = null; }
+  cancel() { clearTimeout(this.timer); this.timer = null; this.pending = null; }
+
+  // The match was paused (a human showed up): freeze the countdown to the bot's answer.
+  pause() {
+    if (!this.pending) return;
+    clearTimeout(this.timer);
+    this.timer = null;
+    this.pending.remaining = Math.max(0, this.pending.fireAt - Date.now());
+  }
+
+  resume() {
+    const p = this.pending;
+    if (!p || this.timer) return;
+    this.schedule(p.answer, p.remaining ?? 0, p.matchNo);
+  }
+
+  schedule(answer, wait, matchNo) {
+    clearTimeout(this.timer);
+    this.pending = { answer, matchNo, fireAt: Date.now() + wait };
+    if (this.game.paused) { this.pending.remaining = wait; this.timer = null; return; }
+    this.timer = setTimeout(() => {
+      this.timer = null;
+      this.pending = null;
+      if (this.game.bot !== this || this.game.phase !== 'playing' || this.game.matchNo !== matchNo || this.game.paused) return;
+      console.log(`[bot] ${this.nickname} answers: ${answer.expression}`);
+      this.game.submit(this.socket, answer.tokens);
+    }, wait);
+  }
 
   async play({ matchNo, digits, target, durationMs, endsAt }) {
     this.cancel();
@@ -50,9 +78,10 @@ export class Bot {
     if (!stillLive()) return;          // stale: a later match is running, or this bot was removed
     if (!answer || !willSolve) return; // no answer, or the bot "can't get it" this round
 
-    const deadline = endsAt ?? startedAt + durationMs;
     const wait = Math.max(0, rand(level.min, level.max) - (Date.now() - startedAt));
-    if (Date.now() + wait >= deadline) return; // it would run out of time — stays silent
+    // Time left in the match; a pause (human showed up) freezes the clock, and resuming extends endsAt.
+    const timeLeft = this.game.paused?.remainingMs ?? ((this.game.endsAt ?? endsAt ?? startedAt + durationMs) - Date.now());
+    if (wait >= timeLeft) return; // it would run out of time — stays silent
 
     // Let the human watch how this AI opponent reasons, and what it cost in tokens.
     try {
@@ -67,12 +96,7 @@ export class Bot {
     } catch { /* never let the commentary break the bot's move */ }
 
     this.cancel();
-    this.timer = setTimeout(() => {
-      this.timer = null;
-      if (!stillLive()) return;
-      console.log(`[bot] ${this.nickname} answers: ${answer.expression}`);
-      this.game.submit(this.socket, answer.tokens);
-    }, wait);
+    this.schedule(answer, wait, matchNo);
   }
 
   // A guaranteed-correct answer from the exhaustive solver, used when the LLM is unavailable/wrong.

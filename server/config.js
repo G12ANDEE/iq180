@@ -36,3 +36,5 @@ export const BOT_MODEL = process.env.BOT_MODEL ?? 'qwen/qwen3.8-27b';
 export const BOT_API_KEY = process.env.GROQ_API_KEY || process.env.BOT_API_KEY || '';
 export const BOT_TIMEOUT_MS = Number(process.env.BOT_TIMEOUT_MS ?? 15_000);
 export const BOT_NAME = process.env.BOT_NAME ?? '🤖 Groq Bot';
+// How long the "Opponent appeared!" prompt waits before continuing with the bot on its own.
+export const BOT_PROMPT_MS = Number(process.env.BOT_PROMPT_MS ?? 20_000);

@@ -41,6 +41,8 @@ const state = {
   leaderboard: [], history: [], mode: null,
   theme: localStorage.getItem('iq180:theme') ?? 'cobalt',
   muted: isMuted(),
+  paused: false,          // server paused a bot match because a human showed up
+  invite: null,           // { names, deadline } — the "Opponent appeared!" prompt
   botThink: null,         // bot progress + token usage while racing the AI opponent (no steps — those are admin-only)
 };
 
@@ -62,7 +64,25 @@ async function boot() {
   state.screen = 'nickname';
   render();
 
-  socket.on('players_update', (p) => { Object.assign(state, { players: p.players, queue: p.queue, online: p.online, mode: p.mode ?? state.mode }); if (['lobby', 'match', 'end', 'ready'].includes(state.screen)) renderSoft(); });
+  socket.on('players_update', (p) => {
+    const wasPaused = state.paused;
+    Object.assign(state, { players: p.players, queue: p.queue, online: p.online, mode: p.mode ?? state.mode, paused: Boolean(p.paused) });
+    if (!waitingHumans().length) state.invite = null; // the newcomer left again
+    if (state.paused && !wasPaused && state.match) state.match.pausedLeft = Math.max(0, state.match.endsAt - serverNow());
+    if (['lobby', 'match', 'end', 'ready'].includes(state.screen)) renderSoft();
+  });
+  socket.on('opponent_appeared', ({ names, autoMs }) => {
+    state.invite = { names, deadline: Date.now() + autoMs };
+    sfx.hint();
+    render();
+    tickInvite();
+  });
+  socket.on('match_resumed', ({ endsAt, serverNow: sn }) => {
+    state.invite = null;
+    state.paused = false;
+    if (state.match) Object.assign(state.match, { endsAt, offset: sn - Date.now(), pausedLeft: null });
+    render();
+  });
   socket.on('extras', (e) => { Object.assign(state, { leaderboard: e.leaderboard ?? [], history: e.history ?? [], mode: e.mode ?? state.mode }); if (['lobby', 'end'].includes(state.screen)) renderSoft(); });
   socket.on('join_error', ({ reason }) => { state.joinError = reason; render(); });
   socket.on('welcome', (p) => {
@@ -72,7 +92,7 @@ async function boot() {
   });
   socket.on('get_ready', ({ startsAt, serverNow: sn }) => {
     state.readyAt = Date.now() + (startsAt - sn);
-    Object.assign(state, { screen: 'ready', end: null, iq: null, votes: [], botThink: null });
+    Object.assign(state, { screen: 'ready', end: null, iq: null, votes: [], botThink: null, invite: null, paused: false });
     render();
     tickClock();
   });
@@ -98,8 +118,8 @@ async function boot() {
   });
   socket.on('iq_report', (r) => { if (r.matchNo === state.end?.matchNo) { state.iq = r; render(); } });
   socket.on('rematch_status', ({ votes }) => { state.votes = votes; render(); });
-  socket.on('match_aborted', ({ reason }) => { flash(`${reason}. Back to the lobby.`); state.screen = 'lobby'; state.match = null; render(); });
-  socket.on('reset', ({ message }) => { flash(message); state.screen = 'lobby'; state.match = null; state.end = null; render(); });
+  socket.on('match_aborted', ({ reason }) => { state.invite = null; state.paused = false; flash(`${reason}. Back to the lobby.`); state.screen = 'lobby'; state.match = null; render(); });
+  socket.on('reset', ({ message }) => { state.invite = null; state.paused = false; flash(message); state.screen = 'lobby'; state.match = null; state.end = null; render(); });
   socket.on('disconnect', () => { flash('Connection lost. Reconnecting…', 0); });
   socket.io.on('reconnect', () => {
     flash('Reconnected', 2000);
@@ -120,7 +140,7 @@ function flash(text, ms = 3500) {
 const usedSlots = () => new Set(state.tokens.filter((t) => t.t === 'digit').map((t) => t.i));
 
 function push(tok) {
-  if (state.screen !== 'match') return;
+  if (state.screen !== 'match' || state.paused) return;
   if (tok.t === 'digit' && usedSlots().has(tok.i)) return;
   state.tokens.push(tok);
   state.pushedAt = Date.now();
@@ -136,7 +156,7 @@ function pressDigitKey(d) {
 function undo() { state.tokens.pop(); state.feedback = null; renderSoft(); }
 function clearExpr() { state.tokens = []; state.feedback = null; renderSoft(); }
 function submit() {
-  if (!state.tokens.length) return;
+  if (!state.tokens.length || state.paused) return;
   socket.emit('submit', { tokens: state.tokens });
   sfx.submit();
   state.feedback = { text: 'Checking…', bad: false };
@@ -166,7 +186,7 @@ function tickClock() {
       const el = document.querySelector('.countdown-big');
       if (el) el.textContent = s || 'Go!';
     } else if (state.screen === 'match') {
-      const ms = Math.max(0, state.match.endsAt - serverNow());
+      const ms = state.paused ? (state.match.pausedLeft ?? 0) : Math.max(0, state.match.endsAt - serverNow());
       const el = document.querySelector('.clock');
       if (el) {
         const s = Math.ceil(ms / 1000);
@@ -187,7 +207,49 @@ function tickClock() {
   clockTimer = setInterval(update, 200);
 }
 
+function tickInvite() {
+  clearInterval(tickInvite.t);
+  tickInvite.t = setInterval(() => {
+    if (!state.invite) return clearInterval(tickInvite.t);
+    const el = document.querySelector('.invite-auto');
+    if (el) el.textContent = `Continuing with the bot in ${Math.max(0, Math.ceil((state.invite.deadline - Date.now()) / 1000))}s`;
+  }, 250);
+}
+
 // ---------- views ----------
+
+const botSeated = () => state.players.some((p) => p.isBot && p.status !== 'waiting');
+const waitingHumans = () => state.players.filter((p) => p.status === 'waiting' && !p.isBot && p.id !== state.me?.id);
+const iAmSeated = () => ['ready', 'playing'].includes(state.players.find((p) => p.id === state.me?.id)?.status);
+const names = (list) => list.map((p) => esc(p.nickname)).join(', ');
+
+// The "Opponent appeared!" prompt: shown to whoever is racing the bot when a person joins.
+function inviteHtml() {
+  if (!state.invite || !botSeated() || !iAmSeated()) return '';
+  const who = state.invite.names.map(esc).join(', ');
+  return `<div class="invite-backdrop" role="dialog" aria-modal="true" aria-labelledby="invite-h">
+    <div class="invite">
+      <div class="ico">👋</div>
+      <h2 id="invite-h">Opponent appeared!</h2>
+      <p><strong>${who}</strong> wants to race. ${state.paused ? 'Your bot match is paused.' : ''}</p>
+      <div class="invite-btns">
+        <button class="primary" data-act="joinhumans">Join the challenge</button>
+        <button class="ghost" data-act="keepbot">Continue with bot</button>
+      </div>
+      <p class="invite-auto"></p>
+    </div>
+  </div>`;
+}
+
+// Light banner after choosing to keep the bot: switch to the people waiting at any time.
+function waitingStripHtml() {
+  const w = waitingHumans();
+  if (state.invite || !w.length || !botSeated() || !iAmSeated()) return '';
+  return `<div class="waitstrip" role="status">
+    <span>👋 <strong>${names(w)}</strong> ${w.length === 1 ? 'is' : 'are'} waiting to play</span>
+    <button class="chipbtn" data-act="joinhumans">Play with players</button>
+  </div>`;
+}
 
 const topbar = () => `
   <header class="topbar">
@@ -260,12 +322,15 @@ function historyHtml() {
 
 function viewLobby() {
   const me = state.players.find((p) => p.id === state.me?.id);
-  const opp = state.players.find((p) => p.id !== state.me?.id && (p.status === 'ready' || p.status === 'playing'));
+  const opps = state.players.filter((p) => p.id !== state.me?.id && (p.status === 'ready' || p.status === 'playing'));
+  const opp = opps[0];
   const seated = me?.status === 'ready';
   let line = 'Choose how you want to play.';
-  if (me?.status === 'waiting') line = `A match is in progress. You're number ${state.queue.indexOf(state.me.nickname) + 1} in the queue.`;
-  else if (opp) line = `Opponent: ${esc(opp.nickname)}. Starting soon…`;
-  return `${topbar()}
+  const botPlayer = botSeated() && state.players.find((p) => !p.isBot && p.status === 'playing');
+  if (me?.status === 'waiting' && botPlayer) line = `${esc(botPlayer.nickname)} is playing the AI bot. They've been asked to let you in…`;
+  else if (me?.status === 'waiting') line = "A round is in progress. You'll race in the next one.";
+  else if (opps.length) line = `${opps.length + 1} players: you vs ${names(opps)}. Starting soon…`;
+  return `${topbar()}${waitingStripHtml()}
     <h2 class="welcome">Welcome, ${esc(state.me.nickname)}.</h2>
     <p class="status-line">${line}</p>
     ${chooserHtml(seated && !opp)}
@@ -283,8 +348,8 @@ function chooserHtml(show) {
     <div class="choose-cards">
       <article class="choice">
         <div class="ico">🧑‍🤝‍🧑</div>
-        <h4>Play a person</h4>
-        <p>Wait for another player to open this game. The match starts the moment someone joins.</p>
+        <h4>Play people</h4>
+        <p>Everyone who joins races together. The match starts the moment someone else joins.</p>
         <div class="waitdots">Waiting for an opponent…</div>
       </article>
       <article class="choice bot">
@@ -301,26 +366,29 @@ function chooserHtml(show) {
   </div>`;
 }
 
-function opponent() {
-  return state.players.find((p) => p.status === 'playing' && p.id !== state.me?.id);
+function opponents() {
+  return state.players.filter((p) => p.status === 'playing' && p.id !== state.me?.id);
 }
 
 function viewReady() {
-  const opp = opponent();
+  const opps = opponents();
   return `${topbar()}
-    <h2 class="welcome">${esc(state.me.nickname)} vs ${esc(opp?.nickname ?? '…')}</h2>
-    <p class="status-line">Get ready. New digits and a new target are coming.</p>
+    <h2 class="welcome">${esc(state.me.nickname)} vs ${opps.length ? names(opps) : '…'}</h2>
+    <p class="status-line">${state.paused ? 'Paused. Someone new wants to race.' : 'Get ready. New digits and a new target are coming.'}</p>
     <div class="countdown-big">3</div>`;
 }
 
 function scoreline() {
   const mine = state.players.find((p) => p.id === state.me.id);
-  const opp = opponent() ?? state.players.find((p) => p.id !== state.me.id && p.status !== 'waiting');
+  const opps = opponents();
+  const right = opps.length === 1
+    ? `<div class="p right"><span class="score">${opps[0].score}</span><span>${esc(opps[0].nickname)}</span></div>`
+    : `<div class="p right opps">${opps.map((o) => `<span class="opp">${esc(o.nickname)} <b>${o.score}</b></span>`).join('') || '<span>—</span>'}</div>`;
   return `<div class="scoreline">
     <div class="p"><span>${esc(mine?.nickname)}</span><span class="score">${mine?.score ?? 0}</span></div>
-    <div class="clock" role="timer">00:01:00</div>
-    <div class="p right"><span class="score">${opp?.score ?? 0}</span><span>${esc(opp?.nickname ?? '—')}</span></div>
-  </div>`;
+    <div class="clock ${state.paused ? 'paused' : ''}" role="timer">00:01:00</div>
+    ${right}
+  </div>${state.paused ? '<p class="paused-note">⏸ Paused</p>' : ''}`;
 }
 
 // What the player sees of the AI opponent: a solving-progress bar and the token cost — never the
@@ -363,7 +431,8 @@ function viewMatch() {
     const anim = fresh && n === state.tokens.length - 1 ? ' new' : '';
     return t.t === 'digit' ? `<span class="chip d${anim}">${digits[t.i]}</span>` : `<span class="chip o${anim}">${t.t === 'op' ? opLabel(t.v) : t.t === 'lp' ? '(' : ')'}</span>`;
   }).join('');
-  return `${topbar()}${scoreline()}
+  return `${topbar()}${scoreline()}${waitingStripHtml()}
+    <div class="board-area ${state.paused ? 'is-paused' : ''}">
     <div class="marquee"><div class="label">Make</div><div class="target">${target}</div></div>
     <div class="tiles">${digits.map((d, i) => `<button class="tile" data-digit="${i}" ${used.has(i) ? 'disabled' : ''} aria-label="Digit ${d}">${d}</button>`).join('')}</div>
     <div class="ops">
@@ -383,6 +452,7 @@ function viewMatch() {
     </div>
     <div class="feedback ${state.feedback?.bad ? 'bad' : ''}">${esc(state.feedback?.text ?? '')}</div>
     ${state.hints.length ? `<ul class="hints">${state.hints.map((h) => `<li${h.ai ? ' class="ai"' : ''}>${esc(h.text)}</li>`).join('')}</ul>` : ''}
+    </div>
     ${botBrainHtml()}`;
 }
 
@@ -402,7 +472,7 @@ function viewEnd() {
   const streakLine = win && e.streakMode && e.streak > 1
     ? `<p class="streak-badge">🔥 ${e.streak} win streak — worth ${e.pointsAwarded} points!</p>` : '';
   const seated = state.players.find((p) => p.id === state.me?.id)?.status === 'ready';
-  return `${topbar()}
+  return `${topbar()}${waitingStripHtml()}
     <section class="verdict ${win ? 'win' : 'lost'}">
       <div class="word">${win ? 'Win' : 'Lost'}</div>
       <p>${detail}</p>
@@ -413,7 +483,7 @@ function viewEnd() {
     ${botBrainHtml()}
     ${iq}
     <div class="center">
-      <button class="primary" data-act="rematch" ${iVoted ? 'disabled' : ''}>${iVoted ? 'Waiting for opponent…' : 'Rematch'}</button>
+      <button class="primary" data-act="rematch" ${iVoted ? 'disabled' : ''}>${iVoted ? `Waiting for others (${state.votes.length}/${e.scores.length})` : 'Rematch'}</button>
       ${state.players.some((p) => p.isBot) ? '<button class="ghost" data-act="removebot">Back to menu</button>' : ''}
       <div class="votes">${others.length ? `${esc(others.join(', '))} wants a rematch.` : ''}</div>
     </div>
@@ -425,7 +495,7 @@ function viewEnd() {
 const views = { connecting: viewConnecting, nickname: viewNickname, lobby: viewLobby, ready: viewReady, match: viewMatch, end: viewEnd };
 
 function render() {
-  app.innerHTML = views[state.screen]() + (state.banner ? `<div class="banner" role="status">${esc(state.banner)}</div>` : '');
+  app.innerHTML = views[state.screen]() + inviteHtml() + (state.banner ? `<div class="banner" role="status">${esc(state.banner)}</div>` : '');
   if (state.screen === 'match' || state.screen === 'ready') tickClock();
   document.getElementById('nick')?.focus();
 }
@@ -460,6 +530,8 @@ app.addEventListener('click', (ev) => {
   else if (act === 'rematch') socket.emit('rematch');
   else if (act === 'addbot') socket.emit('add_bot', { difficulty: b.dataset.diff });
   else if (act === 'removebot') socket.emit('remove_bot');
+  else if (act === 'joinhumans') { state.invite = null; socket.emit('bot_choice', { choice: 'humans' }); render(); }
+  else if (act === 'keepbot') { state.invite = null; socket.emit('bot_choice', { choice: 'bot' }); render(); }
   else if (act === 'mute') { setMuted(!state.muted); state.muted = !state.muted; if (!state.muted) sfx.tap(); render(); }
   else if (act === 'theme') cycleTheme();
   else if (act === 'setdiff') socket.emit('set_mode', { difficulty: b.dataset.diff });
