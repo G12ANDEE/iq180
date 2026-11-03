@@ -69,11 +69,11 @@ npm run client                  # builds, serves the client and opens the browse
 | Arithmetic | Exact fractions (no `eval`, no floats), so `7 ÷ 2 × 2 = 7`. Intermediate fractions are fine; the result must equal the target. |
 | Targets | Integers 1–99 (`TARGET_MAX` env to change). |
 | Timeout | Both players see **Lost** ("Time's up") and nobody gets a point. |
-| More than two clients | Clients 3+ wait in a queue and show in everyone's player list. They take the next free seat. |
+| More than two clients | Everyone races the same puzzle (no seat cap). Anyone arriving mid-round waits in the queue and is seated next round; a match needs at least two racers (or one + the bot). |
 | Duplicate nickname | Gets a suffix: `Alice (2)`. |
-| Disconnect mid-match | Match ends with no point. The opponent returns to the lobby, and the next queued player is seated. |
+| Disconnect mid-match | The race continues while at least two racers remain; otherwise it ends with no point and the rest return to the lobby. |
 | Two correct answers at once | The first one the server receives wins. A late or duplicate submission is rejected. |
-| Rematch | Starts only after **both** players press Rematch. New digits, target and key solution. |
+| Rematch | Starts only after **every racer still in the match** presses Rematch. New digits, target and key solution. |
 | Reset (admin) | Clears all scores and the current match, notifies everyone, and starts a fresh match if two players are present. |
 | Admin access | Only from the server computer itself. Requests arriving through ngrok are refused even though ngrok connects from localhost, because they carry forwarding headers. |
 | Privacy | Opponents never receive each other's attempts, wrong answers or hints. The winning expression is revealed only at match end. |
@@ -102,6 +102,7 @@ npm run client                  # builds, serves the client and opens the browse
 | 11 | **Sound effects**: synthesised with the Web Audio API (tile taps, submit, win/lose, final-seconds tick), with a mute toggle | |
 | 12 | **Theme switcher**: Cobalt / Neon / Sunset palettes, remembered across visits | |
 | 13 | **Bot brain cam**: while racing the AI opponent, watch its solving logic appear step by step, with the Groq token cost for the round and how it compares to the previous round (falls back to the solver's own step trace and "0 tokens" when no key is set) | ✓ |
+| 14 | **Opponent appeared!** (bot handoff): when a person joins while you race the AI, the match pauses (clock and bot frozen) and you choose "Join the challenge" or "Continue with bot"; it auto-continues with the bot after 20 s, and a banner lets you switch to players later | |
 
 ## Layout
 

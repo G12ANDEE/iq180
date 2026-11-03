@@ -4,7 +4,7 @@ Course assignment, Netcentric Architecture (2190472). Total 25 points: demo and 
 
 ## 1. Goal
 
-A two-player (multi-player capable) real-time online math race game built with socket programming in a client-server model. Both players get the same five digits (0-9) and a target number. They race for 1 minute to build an arithmetic expression from the digits that equals the target. First correct solver wins 1 point.
+A real-time online math race game built with socket programming in a client-server model. Everyone in the room races the same puzzle (a match needs at least two racers, or one person plus the AI bot). All racers get the same five digits (0-9) and a target number. They race for 1 minute to build an arithmetic expression from the digits that equals the target. First correct solver wins points (1 by default; escalating in streak mode).
 
 ## 2. Chosen stack (fixed)
 
@@ -33,13 +33,13 @@ A two-player (multi-player capable) real-time online math race game built with s
 7. The server randomly generates five digits (0-9) and a target result that is solvable from those digits, before the match begins, and keeps a key solution.
 8. The server program displays: (1) number of concurrent connected clients, (2) list of connected clients, (3) key solution of the current match.
 9. The client shows the player's name and score.
-10. At match start both players see the five digits and the math operations.
-11. Both play concurrently. First player to correctly solve wins and gets 1 point.
+10. At match start all racers see the five digits and the math operations.
+11. All racers play concurrently. First player to correctly solve wins and gets 1 point.
 12. 1-minute countdown per match.
 13. Each digit can be used only once. Once a digit is selected, it is disabled in the UI.
-14. Players cannot see the other player's actions until the match ends.
-15. At match end the client shows "Win" or "Lost", both players' current scores, and a Rematch button.
-16. If both players agree to a rematch, the server generates five new digits and a new target and updates the key solution.
+14. Players cannot see the other players' actions until the match ends.
+15. At match end the client shows "Win" or "Lost", every racer's current score, and a Rematch button.
+16. If every racer still in the match agrees to a rematch, the server generates five new digits and a new target and updates the key solution.
 17. The server has a reset button that resets the game and the players' scores.
 
 ## 4. Architecture
@@ -50,7 +50,9 @@ A two-player (multi-player capable) real-time online math race game built with s
 ### Server state (per room / match)
 - `players`: socket id, nickname, score, connected flag
 - `digits[5]`, `target`, `keySolution` (expression string)
-- `phase`: `lobby` | `playing` | `finished`
+- `phase`: `lobby` | `ready` | `playing` | `finished`
+- `seats[]` (racers in this/next match, no cap) and `queue[]` (arrived mid-round, seated at the next round)
+- `paused` (bot match frozen while a human is being offered), `keepBot`, `bot`, `mode` (difficulty + streak)
 - `endsAt` (server timestamp), `winnerId | null`
 - `rematchVotes`: set of player ids
 
@@ -60,13 +62,19 @@ Client to server:
 - `join { nickname }`
 - `submit { expression }`
 - `rematch`
+- `add_bot { difficulty }`, `remove_bot`, `bot_choice { choice: "bot" | "humans" }`, `set_mode`
+- `hint`
 
 Server to client:
 - `welcome { nickname, players[] }`
 - `players_update { players[] }` (names and scores, used to show who is connected)
 - `match_start { digits[], target, endsAt, scores }`
 - `match_end { result: "win" | "lost", winner, scores }`
-- `rematch_status { votes }`
+- `get_ready { startsAt, serverNow, matchNo, mode }` (3-2-1 countdown before the match)
+- `rematch_status { votes, needed }`
+- `opponent_appeared { names, paused, autoMs }` (to the person racing the bot when a human joins)
+- `match_resumed { endsAt }`, `match_aborted { reason }`
+- `bot_think`, `iq_report`, `hint`, `extras`, `join_error`
 - `submit_rejected { reason }` (invalid expression, digit reuse, wrong value, not your match)
 - `reset` (scores cleared)
 
@@ -99,15 +107,17 @@ Optionally restrict `/admin` to localhost so players cannot reset the game.
 6. Regenerate on every rematch and update the admin display.
 
 ### Match flow
-1. Two players are connected and have nicknames. The server starts the match, setting `endsAt = now + 60s`.
-2. Players submit. First correct submission (by server receive time) wins: +1 point, phase becomes `finished`, both clients get `match_end`.
+1. At least two racers (or one person plus the bot) are connected and have nicknames. The server runs a short get-ready countdown, then starts the match, setting `endsAt = now + 60s`.
+2. Players submit. First correct submission (by server receive time) wins: +1 point (more in streak mode), phase becomes `finished`, every client gets `match_end`.
 3. If the timer hits 0 with no correct answer, the match ends with no point awarded (see open questions for labels).
-4. Rematch only starts when **both** players have pressed Rematch.
+4. Rematch only starts when **every racer still in the match** has pressed Rematch (a racer leaving can complete the vote).
 5. Reset from the admin page clears scores and the match, and returns to the lobby.
 
 ### Edge cases to handle
-- More than two clients connected: queue or spectate them. Pick one and document it.
-- A player disconnects mid-match: end the match and update the lobby.
+- More than two clients connected: **decided**: all join the same race. Anyone arriving mid-round waits in the queue and is seated at the next round; during the get-ready countdown they can still join.
+- A player disconnects mid-match: the race continues while at least two racers remain; otherwise the match is aborted and the lobby updated.
+- A human joins while someone is racing the bot: the bot match is paused (clock and bot answer frozen) and the bot's player sees "Opponent appeared!" with "Join the challenge" / "Continue with bot". No answer within `BOT_PROMPT_MS` (20 s) auto-continues with the bot. If the newcomer leaves again, the match resumes. After choosing the bot, a banner offers "Play with players" at any time.
+- The bot can only be added by a lone seated player with an empty queue, and leaves with that player.
 - Duplicate nicknames: reject or suffix.
 - A late or double submission after the match has ended is ignored.
 - Reconnect during a match should not crash the server.
@@ -152,6 +162,7 @@ Per the example layout:
 - AI feature: 2 points each, **at least one AI feature is required to earn any extra points**. Non-AI feature: 1 point each.
 - A feature that changes the base design must be a separate mode.
 - Cheap AI options: an LLM-powered or solver-powered hint (spend-a-hint mode), a bot opponent that "races" with a human-like delay, difficulty tuning from player history.
+- Implemented so far: 4 AI (IQ roast, coach hints, AI opponent, bot brain cam) and 10 non-AI (see README "Extra features"). Already over the 10-point cap.
 - Cheap non-AI options: sound effects, leaderboard, spectator mode, match history, themes, streak bonuses, difficulty levels.
 - Fill the extra-features table (feature name and AI flag) for submission.
 
