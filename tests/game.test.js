@@ -216,6 +216,33 @@ test('bot: "continue with bot" resumes with the paused time; switching later sti
   close(A, B);
 });
 
+test('bot: can still be picked when other people are in the lobby; they wait, no pop-up', async () => {
+  const A = client(), B = client();
+  const wa = once(A, 'welcome');
+  A.emit('join', { nickname: 'Picky' });
+  await wa;
+  const wb = once(B, 'welcome');
+  B.emit('join', { nickname: 'Other' });
+  await wb;
+  B.emit('play_people');
+  const seenByA = [];
+  A.onAny((ev) => seenByA.push(ev));
+  const startA = once(A, 'match_start');
+  A.emit('add_bot', { difficulty: 'easy' });
+  await startA;
+  assert.ok(srv.game.bot, 'bot seated');
+  assert.equal(srv.game.seats.length, 2, 'just the player and the bot');
+  assert.deepEqual(srv.game.waitingHumans().map((c) => c.nickname), ['Other']);
+  assert.ok(srv.game.keepBot && !srv.game.paused, 'match runs without pausing');
+  assert.ok(!seenByA.includes('opponent_appeared'), 'no pop-up for someone already known');
+
+  const nextB = once(B, 'match_start');
+  A.emit('bot_choice', { choice: 'humans' });    // switch to the waiting player later
+  await nextB;
+  assert.equal(srv.game.bot, null);
+  close(A, B);
+});
+
 test('bot: an ignored prompt continues with the bot on its own', async () => {
   const { A } = await soloVsBot();
   const B = client();

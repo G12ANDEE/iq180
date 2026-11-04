@@ -75,7 +75,15 @@ export class Game {
 
   addBot(socket, difficulty) {
     if (!this.isSeatedHuman(socket)) return;
-    if (this.bot || this.phase !== 'lobby' || this.seats.length !== 1 || this.queue.length) return;
+    if (this.bot || this.phase !== 'lobby') return;
+    // Other people in the lobby don't stop you from picking the bot: they wait in the queue,
+    // and you can still switch to them from the "waiting to play" strip at any time.
+    const others = this.seats.filter((id) => id !== socket.id);
+    this.seats = [socket.id];
+    this.queue.push(...others);
+    this.wantsPlay.clear();
+    // You already knew they were here, so skip the "Opponent appeared!" pop-up.
+    this.keepBot = this.waitingHumans().length > 0;
     const bot = new Bot(this, difficulty);
     this.bot = bot;
     this.clients.set(bot.id, { id: bot.id, nickname: this.uniqueName(bot.nickname), score: 0, socket: bot.socket, isBot: true });
