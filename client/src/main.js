@@ -337,7 +337,7 @@ function viewLobby() {
   const seated = me?.status === 'ready';
   let line = 'Choose how you want to play.';
   const botPlayer = botSeated() && state.players.find((p) => !p.isBot && p.status === 'playing');
-  if (me?.status === 'waiting' && botPlayer) line = `${esc(botPlayer.nickname)} is playing the AI bot. They've been asked to let you in…`;
+  if (me?.status === 'waiting' && botPlayer) line = `${esc(botPlayer.nickname)} is playing the AI bot. They can see you're waiting and can switch to people at any time.`;
   else if (me?.status === 'waiting') line = "A round is in progress. You'll race in the next one.";
   else if (seated && opps.length) line = me.wantsPlay
     ? `Waiting for ${names(opps.filter((o) => !o.wantsPlay)) || 'everyone'} to accept…`
@@ -368,16 +368,16 @@ function chooserHtml(show, me, opps = []) {
         <p>${joined ? `${names(opps)} ${opps.length === 1 ? 'is' : 'are'} here. The match starts when everyone clicks play.` : 'Everyone who joins races together. The match starts when everyone clicks play.'}</p>
         ${people}
       </article>
-      ${joined ? '' : `<article class="choice bot">
+      <article class="choice bot">
         <div class="ico">🤖</div>
         <h4>Play the AI bot</h4>
-        <p>Race a Groq-powered opponent right now, and watch it solve. Pick its skill:</p>
+        <p>${joined ? 'Rather race the AI? The others wait until you switch back to people.' : 'Race a Groq-powered opponent right now, and watch it solve.'} Pick its skill:</p>
         <div class="bot-btns">
           <button class="ghost" data-act="addbot" data-diff="easy">Easy</button>
           <button class="ghost" data-act="addbot" data-diff="medium">Medium</button>
           <button class="primary" data-act="addbot" data-diff="hard">Hard</button>
         </div>
-      </article>`}
+      </article>
     </div>
   </div>`;
 }
