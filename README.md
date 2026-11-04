@@ -67,14 +67,14 @@ npm run client                  # builds, serves the client and opens the browse
 | Use all five digits? | **Yes**, each exactly once. The generator only picks targets reachable with all five. |
 | Operators | `+ − × ÷` and parentheses. No concatenation (`3`,`3` ≠ `33`). Division by zero is invalid. |
 | Arithmetic | Exact fractions (no `eval`, no floats), so `7 ÷ 2 × 2 = 7`. Intermediate fractions are fine; the result must equal the target. |
-| Targets | Integers 1–99 (`TARGET_MAX` env to change). |
-| Timeout | Both players see **Lost** ("Time's up") and nobody gets a point. |
-| More than two clients | Everyone races the same puzzle (no seat cap). Anyone arriving mid-round waits in the queue and is seated next round; a match needs at least two racers (or one + the bot). |
+| Targets | Integers 1–99 on Normal (`TARGET_MAX` env to change); Easy and Hard use their own ranges (see Difficulty modes). |
+| Timeout | Everyone sees **Lost** ("Time's up") and nobody gets a point. |
+| More than two clients | Everyone races the same puzzle (no seat cap). Anyone arriving mid-round waits in the queue and is seated next round; a match needs at least two racers (or one + the bot) and starts only once every racer has clicked "Play with other players". |
 | Duplicate nickname | Gets a suffix: `Alice (2)`. |
 | Disconnect mid-match | The race continues while at least two racers remain; otherwise it ends with no point and the rest return to the lobby. |
 | Two correct answers at once | The first one the server receives wins. A late or duplicate submission is rejected. |
 | Rematch | Starts only after **every racer still in the match** presses Rematch. New digits, target and key solution. |
-| Reset (admin) | Clears all scores and the current match, notifies everyone, and starts a fresh match if two players are present. |
+| Reset (admin) | Clears all scores and the current match, notifies everyone, and returns everyone to the lobby; a new match starts once the players opt in again. |
 | Admin access | Only from the server computer itself. Requests arriving through ngrok are refused even though ngrok connects from localhost, because they carry forwarding headers. |
 | Privacy | Opponents never receive each other's attempts, wrong answers or hints. The winning expression is revealed only at match end. |
 
@@ -87,21 +87,24 @@ npm run client                  # builds, serves the client and opens the browse
 
 ## Extra features
 
-| # | Feature | AI |
-|---|---|---|
-| 1 | **Match IQ roast**: after each match, an LLM (gpt-oss-120b via Groq) estimates a tongue-in-cheek IQ and writes a one-line roast for each player from their attempts, wrong answers, hints used and solve time | ✓ |
-| 2 | **AI coach hints**: an exhaustive solver picks a real sub-step of a real solution, and the LLM rewrites it as a coach-style nudge. The rewrite is accepted only if it keeps the solver's exact expression and doesn't leak the full answer; otherwise the plain solver hint is shown (2 per match, private to that player) | ✓ |
-| 3 | **AI opponent (bot)**: fills an empty seat and races you, driven by a free LLM (any OpenAI-compatible endpoint; Groq by default), with easy/medium/hard difficulty | ✓ |
-| 4 | Live expression preview: shows the current value, and the missing-digit warning, as you build | |
-| 5 | Keyboard play: digits, `+ - * / ( )`, Backspace to undo, Esc to clear, Enter to submit | |
-| 6 | Waiting queue for 3+ clients with automatic seat promotion | |
-| 7 | **Difficulty modes** (separate mode): Easy / Normal / Hard change the target range and the countdown length; picked in the lobby and shown on `/admin` | |
-| 8 | **Win-streak bonus** (separate mode): consecutive wins are worth escalating points (1, 2, 3…) instead of a flat point | |
-| 10 | **Match history**: the last several rounds (digits, target, winner, solution) in the lobby and on `/admin` | |
-| 11 | **Sound effects**: synthesised with the Web Audio API (tile taps, submit, win/lose, final-seconds tick), with a mute toggle | |
-| 12 | **Theme switcher**: Cobalt / Neon / Sunset palettes, remembered across visits | |
-| 13 | **Bot brain cam**: while racing the AI opponent, watch its solving logic appear step by step, with the Groq token cost for the round and how it compares to the previous round (falls back to the solver's own step trace and "0 tokens" when no key is set) | ✓ |
-| 14 | **Opponent appeared!** (bot handoff): when a person joins while you race the AI, the match pauses (clock and bot frozen) and you choose "Join the challenge" or "Continue with bot"; it auto-continues with the bot after 20 s, and a banner lets you switch to players later | |
+AI features come first, then the rest, grouped by what they do.
+
+| # | Group | Feature | AI |
+|---|---|---|---|
+| 1 | AI: opponent | **AI opponent (bot)**: pick "Play the AI bot" from the lobby, even when other people are connected (they wait in the queue until you switch back to them). It is driven by a free LLM (any OpenAI-compatible endpoint; Groq by default), with easy/medium/hard difficulty that sets how fast and how reliably it answers | ✓ |
+| 2 | AI: opponent | **Bot brain cam**: while racing the AI opponent you see a solving-progress bar and the LLM token cost for the round, compared with the previous round ("0 tokens" when no key is set). The step-by-step trace is shown only on `/admin`, so the bot's working is never revealed mid-match | ✓ |
+| 3 | AI: coaching & feedback | **AI coach hints**: an exhaustive solver picks a real sub-step of a real solution, and the LLM rewrites it as a coach-style nudge. The rewrite is accepted only if it keeps the solver's exact expression and doesn't leak the full answer; otherwise the plain solver hint is shown (2 per match, private to that player) | ✓ |
+| 4 | AI: coaching & feedback | **Match IQ roast**: after each match, an LLM (gpt-oss-120b via Groq) estimates a tongue-in-cheek IQ and writes a one-line roast for each player from their attempts, wrong answers, hints used and solve time | ✓ |
+| 5 | Matchmaking & flow | **Opt-in matches and waiting queue**: nobody is pulled into a match; it starts once every seated player clicks "Play with other players". Anyone arriving mid-round, or while someone races the bot, waits in the queue and is seated at the next opportunity |  |
+| 6 | Matchmaking & flow | **Opponent appeared!** (bot handoff): when a person joins while you race the AI, the match pauses (clock and bot frozen) and you choose "Join the challenge" or "Continue with bot"; it auto-continues with the bot after 20 s, and a banner lets you switch to players later. If you picked the bot while people were already waiting, there is no pop-up, only the banner |  |
+| 7 | Matchmaking & flow | **Surrender**: a 🏳 button (with confirmation) gives up the round and returns you to the lobby; against a person the other racer is told, against the bot the match simply ends |  |
+| 8 | Game modes | **Difficulty modes** (separate mode): Easy (targets 1–20, 90 s) / Normal (1–99, 60 s) / Hard (50–200, 45 s); picked in the lobby and shown on `/admin` |  |
+| 9 | Game modes | **Win-streak bonus** (separate mode): consecutive wins are worth escalating points (1, 2, 3…) instead of a flat point |  |
+| 10 | Building your answer | Live expression preview: shows the current value, and the missing-digit warning, as you build |  |
+| 11 | Building your answer | Keyboard play: digits, `+ - * / ( )`, Backspace to undo, Esc to clear, Enter to submit |  |
+| 12 | Look & feel, history | **Match history**: the last several rounds (digits, target, winner, solution) in the lobby and on `/admin` |  |
+| 13 | Look & feel, history | **Sound effects**: synthesised with the Web Audio API (tile taps, submit, win/lose, final-seconds tick), with a mute toggle |  |
+| 14 | Look & feel, history | **Theme switcher**: Cobalt / Neon / Sunset palettes, remembered across visits |  |
 
 ## Layout
 
