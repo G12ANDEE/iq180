@@ -85,10 +85,12 @@ export async function aiSolve(digits, target) {
     const data = await res.json();
     const u = data.usage ?? {};
     const usage = { promptTokens: u.prompt_tokens ?? 0, completionTokens: u.completion_tokens ?? 0, totalTokens: u.total_tokens ?? ((u.prompt_tokens ?? 0) + (u.completion_tokens ?? 0)), model: BOT_MODEL };
-    for (const expr of candidateExpressions(data.choices?.[0]?.message?.content ?? '')) {
+    const content = data.choices?.[0]?.message?.content ?? '';
+    for (const expr of candidateExpressions(content)) {
       const tokens = expressionToTokens(expr, digits);
       if (tokens && judge(tokens, digits, target).ok) return { expression: expr, tokens, usage };
     }
+    console.warn(`[bot] LLM answer failed verification, using solver: ${JSON.stringify(content.trim().slice(-120))}`);
     return null;
   } catch (err) {
     console.warn(`[bot] LLM solve failed: ${err?.message ?? err}`);

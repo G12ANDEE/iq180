@@ -427,7 +427,7 @@ function botBrainHtml() {
       : b.delta > 0 ? `▲ ${b.delta} more than last round` : `▼ ${-b.delta} fewer than last round`;
     tokenLine = `<div class="tok"><strong>${b.totalTokens}</strong> tokens — prompt ${u.promptTokens} + output ${u.completionTokens} · <span class="delta">${delta}</span></div>`;
   } else {
-    tokenLine = '<div class="tok">Answered by the built-in solver · <strong>0</strong> tokens (no Groq key set)</div>';
+    tokenLine = '<div class="tok">Answered by the built-in solver · <strong>0</strong> tokens (AI answer unavailable or incorrect)</div>';
   }
   const src = b.source === 'llm' ? `Groq${b.usage?.model ? ` · ${esc(b.usage.model)}` : ''}` : 'Exhaustive solver';
   return `<section class="botbrain">

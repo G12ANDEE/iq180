@@ -28,7 +28,7 @@ function render() {
   if (!bt) {
     $('botbrain').textContent = 'No AI opponent solving this match.';
   } else {
-    const src = bt.source === 'llm' ? `Groq${bt.usage?.model ? ` · ${esc(bt.usage.model)}` : ''} · ${bt.totalTokens} tokens (prompt ${bt.usage?.promptTokens ?? 0} + output ${bt.usage?.completionTokens ?? 0})` : 'Built-in solver · 0 tokens (no Groq key)';
+    const src = bt.source === 'llm' ? `Groq${bt.usage?.model ? ` · ${esc(bt.usage.model)}` : ''} · ${bt.totalTokens} tokens (prompt ${bt.usage?.promptTokens ?? 0} + output ${bt.usage?.completionTokens ?? 0})` : 'Built-in solver · 0 tokens (AI answer unavailable or incorrect)';
     $('botbrain').innerHTML = `
       <div class="bb-src">${src}</div>
       <div class="bb-expr">${esc(bt.expression)}</div>
