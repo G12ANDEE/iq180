@@ -1,5 +1,13 @@
 # IQ180
 
+> **My contributions (G12ANDEE)**
+> Team project for Netcentric Architecture (2190472), Chulalongkorn University. The commits in this repository were pushed by teammates, so this section lists the parts I wrote.
+>
+> - **AI bot opponent**: an LLM-driven opponent (any OpenAI-compatible API, Groq by default) with easy/medium/hard difficulty, in `server/bot.js` and `server/bot-brain.js`.
+> - **Game features**: most of the gameplay features (see [Extra features](#extra-features)).
+>
+> Tanaree handled the client–server connection (Socket.IO).
+
 A real-time two-player math race (Netcentric Architecture 2190472). The server deals five digits (0–9) and a target, and the first player to build an expression that hits the target wins the point. You have 60 seconds.
 
 Stack: Node.js + Express + socket.io v4 (server), Vite + vanilla JS (client), ngrok free static domain (public address).
